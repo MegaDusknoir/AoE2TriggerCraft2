@@ -57,8 +57,14 @@ def createCeAttributeDict(outPath):
         f.write('CONDITION_ATTRIBUTES = ' + str(conditionAttributes) + '\n')
 
 if __name__ == '__main__':
-    if os.path.isdir(f'_prebuild') == False:
-        os.makedirs(f'_prebuild')
-    createDummyVersion('_prebuild/version.py')
-    createIcon(iconPath='AoE2TC.ico', outPath='_prebuild/AoE2TC_icon.py')
-    createCeAttributeDict(outPath='_prebuild/CeAttributes.py')
+    workDir = os.path.dirname(__file__)
+
+    if os.path.isdir(f'{workDir}/_prebuild') == False:
+        os.makedirs(f'{workDir}/_prebuild')
+    createDummyVersion(f'{workDir}/_prebuild/version.py')
+    print('Created ' + '_prebuild/version.py')
+    createIcon(iconPath='AoE2TC.ico', outPath=f'{workDir}/_prebuild/AoE2TC_icon.py')
+    print('Created ' + '_prebuild/AoE2TC_icon.py')
+    createCeAttributeDict(outPath=f'{workDir}/_prebuild/CeAttributes.py')
+    print('Created ' + '_prebuild/CeAttributes.py')
+    print('prebuild done.')

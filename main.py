@@ -10,6 +10,7 @@ import time
 from typing import Literal, TextIO
 import ctypes
 import tempfile
+from parse import parse
 
 import tkinter as tk
 import tkinter.font as tkfont
@@ -54,8 +55,15 @@ from _prebuild.AoE2TC_icon import Icon
 from _prebuild.CeAttributes import CONDITION_ATTRIBUTES, EFFECT_ATTRIBUTES
 from WidgetLayout import CONDITION_WIDGET_FORM, EFFECT_WIDGET_FORM
 
-workDir = os.path.dirname(sys.argv[0])
-# ASPSettings.ENABLE_XS_CHECK_INTEGRATION = False
+if getattr(sys, 'frozen', False): # True if PyInstaller packed
+    workDir = os.path.dirname(sys.executable)
+else:
+    workDir = os.path.dirname(os.path.abspath(__file__))
+
+ASPSettings.ENABLE_XS_CHECK_INTEGRATION = False
+
+# allow asp to overwriting source, but not this version 0.4.6
+# ASPSettings.ALLOW_OVERWRITING_SOURCE = True
 
 class CreateIcon():
     def __init__(self):
@@ -492,7 +500,50 @@ class TCWindow():
             self.logCatch = self.__catchScenLoadProgress
             self.activeScenario:AoE2DEScenario = AoE2DEScenario.from_file(path)
         except UnknownScenarioStructureError as e:
-            messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
+            def checkVersionNotSupportedRaise(e: UnknownScenarioStructureError):
+                """Catch ASP version not supported exception."""
+                if not isinstance(e.args[0], str):
+                    return False
+                parsed = parse("The version {0}:{1} is not supported by AoE2ScenarioParser. :(", e.args[0])
+                if not parsed:
+                    return False
+                strScenVer: str = parsed.fixed[1]
+                strToolVer = f'{AoE2DEScenario.LATEST_VERSION[0]}.{AoE2DEScenario.LATEST_VERSION[1]}'
+                vMain, vSub = ((int(i) if i.isdigit() else 0) for i in strScenVer.split('.'))
+                vscen = vMain * 65536 + vSub
+                vtool = AoE2DEScenario.LATEST_VERSION[0] * 65536 + AoE2DEScenario.LATEST_VERSION[1]
+                if vscen > vtool:
+                    messagebox.showerror(title=TEXT['titleOpenfailed'],
+                                        message=TEXT['messageOpenfailed'].format( \
+                                            TEXT['messageOpenfailedByNewerVersion'].format(strScenVer, strToolVer)))
+                else:
+                    messagebox.showerror(title=TEXT['titleOpenfailed'],
+                                        message=TEXT['messageOpenfailed'].format( \
+                                            TEXT['messageOpenfailedByEarlyVersion'].format(strScenVer, strToolVer)))
+                return True
+
+            if not checkVersionNotSupportedRaise(e):
+                messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
+        except UnsupportedVersionError as e:
+            def checkTriggerNotSupportedRaise(e: UnsupportedVersionError):
+                """Catch ASP trigger not supported exception."""
+                if not isinstance(e.args[0], str):
+                    return False
+                parsed = parse(
+                    "\n\nScenario version: [{0}] with trigger version: [{1}] cannot be supported. :(\n"
+                    "More context on Discord: https://discord.com/channels/866955546182942740/877085102201536553/1372708645711777843",
+                    e.args[0])
+                if not parsed:
+                    return False
+                strScenVer: str = parsed.fixed[0]
+                strTriggerVer: str = parsed.fixed[1]
+                messagebox.showerror(title=TEXT['titleOpenfailed'],
+                                     message=TEXT['messageOpenfailed'].format( \
+                                         TEXT['messageOpenfailedByEarlyTrigger'].format(strScenVer, strTriggerVer)))
+                return True
+
+            if not checkTriggerNotSupportedRaise(e):
+                messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
         except Exception as e:
             messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
             raise e

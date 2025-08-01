@@ -69,7 +69,7 @@ DIR_INCLUDING = [
 ]
 
 if __name__ == '__main__':
-    workDir = os.path.dirname(sys.argv[0])
+    workDir = os.path.dirname(__file__)
 
     if os.path.isdir(f'_prebuild') == False:
         os.makedirs(f'_prebuild')
@@ -90,7 +90,8 @@ if __name__ == '__main__':
         for dir in DIR_INCLUDING:
             if os.path.isdir(f'{workDir}/{dir}'):
                 for file in os.listdir(f'{workDir}/{dir}'):
-                    if f'{dir}/{file}' in tracked:
+                    if f'{dir}/{file}' in tracked \
+                    or file in ['UnitsName.json', 'TechsName.json', 'TributesName.json']:
                         zf.write(f'{workDir}/{dir}/{file}', f'{dir}/{file}')
                         print(f'Write "{workDir}/{dir}/{file}" to "{dir}/{file}"')
         zf.write(f"{workDir}/release/Trigger Craft.exe", "Trigger Craft.exe")

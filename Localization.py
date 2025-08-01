@@ -107,8 +107,8 @@ def loadLocalizedText(workDir: str, lang: str='auto') -> None:
     if os.path.isfile(f'{localizationPath}/UnitsName.json'):
         with open(f'{localizationPath}/UnitsName.json', 'r', encoding='utf-8') as config:
             UNIT_NAME.update(json.load(config, object_hook=keys_to_int))
-    if os.path.isfile(f'{localizationPath}/ResourcesName.json'):
-        with open(f'{localizationPath}/ResourcesName.json', 'r', encoding='utf-8') as config:
+    if os.path.isfile(f'{localizationPath}/TributesName.json'):
+        with open(f'{localizationPath}/TributesName.json', 'r', encoding='utf-8') as config:
             RESOURCE_NAME.update(json.load(config, object_hook=keys_to_int))
 
 def getConditionName(conditionType: int) -> str:
