@@ -14,9 +14,13 @@ For general users, extract zip file and run
 
 [Download](https://github.com/MegaDusknoir/AoE2TriggerCraft2/releases/latest) 
 
+Manual (Not yet created)
+
 普通玩家可直接解压并运行
 
 [下载](https://github.com/MegaDusknoir/AoE2TriggerCraft2/releases/latest)
+
+[使用手册](https://github.com/MegaDusknoir/AoE2TriggerCraft2/wiki/Manual-(%E4%B8%AD%E6%96%87))
 
 ## Getting Started
 

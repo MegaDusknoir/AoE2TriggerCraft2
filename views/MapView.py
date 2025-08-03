@@ -8,9 +8,10 @@ import ttkbootstrap as ttk
 import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageTk
+from PIL.Image import Resampling
 
 from AoE2ScenarioParser.objects.managers.map_manager import MapManager
-from Localization import TEXT
+from Localization import TEXT, UNIT_NAME
 from TerrainPal import TERRAIN_PAL
 from Util import ZoomImageViewer
 
@@ -23,6 +24,22 @@ class MapView(ttk.Frame):
     def mm(self):
         return self.app.activeScenario.map_manager
 
+    @property
+    def um(self):
+        return self.app.activeScenario.unit_manager
+
+    UNIT_DOT_PAL = [
+        (255, 255, 255),
+        (0, 0, 255),
+        (255, 0, 0),
+        (0, 255, 0),
+        (255, 255, 0),
+        (0, 255, 255),
+        (255, 0, 255),
+        (64, 64, 64),
+        (255, 128, 0),
+    ]
+
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
         self.app = app
@@ -32,11 +49,11 @@ class MapView(ttk.Frame):
                                         PIL.Image.new('RGB', (1,1)), bg="black",
                                         transform=self.__rotateMap)
         self.zvMapView.pack(fill=BOTH, expand=YES, anchor=CENTER)
-        self.zvMapView.bind('<Button-1>', lambda e: \
+        self.zvMapView.bind('<ButtonRelease-1>', lambda e: \
                             self.drawPoint(
                                 self.__mapViewCoordinateConv(self.zvMapView.coords_conv(e.x,e.y))
                                 ))
-        self.zvMapView.bind('<Shift-Button-1>', lambda e: \
+        self.zvMapView.bind('<Shift-ButtonRelease-1>', lambda e: \
                             self.drawArea(
                                 self.__mapViewCoordinateConv(self.zvMapView.coords_conv(e.x,e.y))
                                 ))
@@ -55,6 +72,14 @@ class MapView(ttk.Frame):
             for x in range(0, self.mm.map_width):
                 tile = self.mm.get_tile(x, y)
                 self.imgDotMapRaw.putpixel((x,y), TERRAIN_PAL[tile.terrain_id])
+        self.imgUnitsDotLayer = PIL.Image.new('RGBA', (self.sizeMap * 2 + 1, self.sizeMap * 2 + 1), (0,0,0,0))
+        for unit in self.um.get_all_units():
+            if UNIT_NAME[unit.unit_const]['minimap_mode'] in [1, 4]:
+                x = int(unit.x * 2 + 0.5)
+                y = int(unit.y * 2 + 0.5)
+                color = (*MapView.UNIT_DOT_PAL[unit.player], 255)
+                self.imgUnitsDotLayer.putpixel((x,y), color)
+        # Todo: redraw when unit modified
         self.__redrawMap()
         self.zvMapView.see(*self.__inverseMapViewCoordinateConv((self.sizeMap // 2, self.sizeMap // 2)))
 
@@ -92,9 +117,13 @@ class MapView(ttk.Frame):
     def __rotateMap(self, image:PIL.Image.Image, zoom: float) -> PIL.Image.Image:
         """Transform a dot map to zoomed rhombus view"""
         zoomed_width = int(image.width * zoom)
-        image = image.resize((zoomed_width, zoomed_width), resample=PIL.Image.NEAREST)
+        image = image.resize((image.width * 4,)*2, resample=Resampling.NEAREST)
+        unitLayer = self.imgUnitsDotLayer.resize((self.imgUnitsDotLayer.width * 2,)*2,
+                                                  resample=Resampling.NEAREST)
+        image.paste(unitLayer, (-int(1),)*2, unitLayer)
+        image = image.resize((zoomed_width,)*2, resample=Resampling.NEAREST)
         image = image.rotate(45,expand=True, fillcolor=self.background)
-        image = image.resize((image.width, int(image.height/2)), resample=PIL.Image.NEAREST)
+        image = image.resize((image.width, int(image.height/2)), resample=Resampling.NEAREST)
         return image
 
     def __redrawMap(self):
@@ -112,7 +141,7 @@ class MapView(ttk.Frame):
         self.pointSelect[1] = (-1, -1)
         x, y = self.pointSelect[0]
         imgDotBase = self.imgDotMapRaw.copy()
-        imgDotMask = PIL.Image.new('RGBA', (self.sizeMap,self.sizeMap), (0,0,0,0))
+        imgDotMask = PIL.Image.new('RGBA', (self.sizeMap,)*2, (0,0,0,0))
         imageDraw = PIL.ImageDraw.Draw(imgDotMask)
         imageDraw.point((x, y), (255, 255, 0, 176))
         imgDotBase.paste(imgDotMask, mask=imgDotMask)

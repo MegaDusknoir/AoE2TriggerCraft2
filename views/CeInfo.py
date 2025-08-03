@@ -506,11 +506,15 @@ class CeInfoView(ttk.Frame):
             return super().gridAttribute(column, row, columnspan, rowspan)
 
         def __setAttributeUnit(self) -> None:
-            unitId = self.outer.fUEditor.tvUnitList.getUnitFocusId()
-            if unitId == None:
-                unitId = -1
-            location = [-1, -1, unitId]
-            self.lvbtn.internal_var.set(location)
+            if self.outer.nTabsLeft.select() \
+            and self.outer.nTabsLeft.index('current') == self.outer.nTabsLeft.index(self.outer.fUEditor):
+                unitId = self.outer.fUEditor.tvUnitList.getUnitFocusId()
+                if unitId == None:
+                    unitId = -1
+                location = [-1, -1, unitId]
+                self.lvbtn.internal_var.set(location)
+            else:
+                self.outer.nTabsLeft.select(self.outer.fUEditor)
 
         def __setAttributeArea(self) -> None:
             if self.attribute == 'area_x1':

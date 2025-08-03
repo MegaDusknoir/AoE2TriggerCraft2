@@ -160,13 +160,6 @@ class UnitInfoView(ttk.Frame):
                 if self.ul.getNodeId(item) == self.unitFocus.reference_id:
                     self.ul.setNodeConst(item, self.unitFocus.unit_const)
 
-
-    def __modifyAttribute(self, attribute: str, value: int):
-        floatValue = value
-        print(f'modifyAttribute {attribute} = {floatValue}')
-        if self.unitFocus is not None:
-            setattr(self.unitFocus, attribute, floatValue)
-
     def unitSelected(self, unit: Unit):
         self.btnUConst.variable.set(unit.unit_const)
         self.varUPlayer.set(unit.player)
@@ -265,7 +258,7 @@ class UnitConstSelectButton(IntValueButton):
                  **kwargs):
         encodeMethod = lambda unitConst: getUnitListName(unitConst)
         self.outer = outer
-        self.variable = ttk.IntVar()
+        self.variable = ttk.IntVar(value=-1)
         self.allowNone = allowNone
         super().__init__(master, variable=self.variable,
                          style='ceWindowWidgetButton.success.Outline.TButton', width=20,
@@ -332,6 +325,18 @@ class UnitConstSelectButton(IntValueButton):
             else:
                 return False
 
+        def set_initial_focus(tv: UnitConstTreeView):
+            id = self.internal_var.get()
+            if not self.allowNone and id < 0:
+                return
+            if self.allowNone:
+                initial_focus = tv.get_children('')[id + 1]
+            else:
+                initial_focus = tv.get_children('')[id]
+            tv.see(initial_focus)
+            tv.focus(initial_focus)
+            tv.selection_set((initial_focus, ))
+            
         wndSelect = ttk.Toplevel(master=self.outer.main, title=TEXT['titleUnitConst'])
         self.outer.centerWindowGeometry(wndSelect, self.outer.dpi(400), self.outer.dpi(500))
         wndSelect.grab_set()
@@ -352,6 +357,7 @@ class UnitConstSelectButton(IntValueButton):
         tvUnitConst.bind('<Return>', on_tv_confirm)
         varFilter.trace_add('write', lambda *args: tvUnitConst.listUnit(listFilter))
         varFilter.set('')
+        set_initial_focus(tvUnitConst)
         tvsbUnitConst.pack(side=RIGHT, fill=Y)
         tvUnitConst.pack(side=RIGHT, fill=BOTH, expand=YES)
         fUnitConst.pack(fill=BOTH, expand=YES, padx=self.outer.dpi(10))

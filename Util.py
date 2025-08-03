@@ -2,7 +2,6 @@ import re
 import time
 import tkinter as tk
 from tkinter.constants import *
-from tkinter import messagebox
 from typing import Any, Callable
 import ttkbootstrap as ttk
 import tkinter as tk
@@ -69,7 +68,7 @@ class ZoomImageViewer(tk.Canvas):
         super().__init__(master, **kwargs)
         self.original_image = pil_image
         self.min_zoom = 2.0
-        self.max_zoom = 16.0
+        self.max_zoom = 24.0
         self.zoom_factor = self.min_zoom * 2
         self.img_id = None
         self.transform = transform
@@ -84,6 +83,9 @@ class ZoomImageViewer(tk.Canvas):
         self.bind("<Configure>", self.__on_resize)
         self.bind("<MouseWheel>", self.__on_mousewheel)
         self.bind("<Shift-MouseWheel>", self.__on_shift_mousewheel)
+        self.bind("<B1-Motion>", self.__on_drag)
+        self.bind("<ButtonPress-1>", self.__on_drag_start)
+        self.bind("<Shift-ButtonPress-1>", self.__on_drag_start)
 
         # 平移偏移（图像相对canvas的偏移）
         self.offset_x = 0
@@ -100,6 +102,20 @@ class ZoomImageViewer(tk.Canvas):
         else:
             self.display_image = self.__default_transform(self.original_image, self.zoom_factor)
         self.tk_image = PIL.ImageTk.PhotoImage(self.display_image)
+
+    def __on_drag_start(self, event):
+        self._last_x = event.x
+        self._last_y = event.y
+
+    def __on_drag(self, event):
+        delta_x = event.x - self._last_x
+        delta_y = event.y - self._last_y
+        self.offset_x += delta_x
+        self.offset_y += delta_y
+        self.__offset_limit()
+        self.coords(self.img_id, self.offset_x, self.offset_y)
+        self._last_x = event.x
+        self._last_y = event.y
 
     def __on_mousewheel(self, event):
         delta = 60 if event.delta > 0 else -60
@@ -254,7 +270,7 @@ class IntValueButton(ValueButton):
     def __init__(self, master, variable: ttk.IntVar,
                  encodeMethod: Callable[[int], str],
                  **kwargs):
-        self.internal_var: ttk.IntVar = ttk.IntVar()
+        self.internal_var: ttk.IntVar = ttk.IntVar(value=-1)
         super().__init__(master, variable, encodeMethod, **kwargs)
 
 class ListValueButton(ValueButton):

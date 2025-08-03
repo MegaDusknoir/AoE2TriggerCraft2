@@ -40,6 +40,25 @@ def getUnitName(data: DatFile, langStrings: dict[int, str]):
                     unitsName[id] = f'<Unit{id}>'
     return unitsName
 
+def getUnitConstInfo(data: DatFile, langStrings: dict[int, str]):
+    unitConstInfo = {}
+    for id, unit in enumerate(data.civs[0].units):
+        try:
+            langDllKey = unit.language_dll_name
+        except AttributeError:
+            unitsName = f'<None{id}>'
+        else:
+            if langDllKey in langStrings:
+                unitsName = langStrings[langDllKey]
+            else:
+                unitsName = unit.name
+                if unit.name.strip() in ['', 'None']:
+                    unitsName = f'<Unit{id}>'
+        unitConstInfo[id] = {'name': unitsName,
+                             'minimap_mode':getattr(unit, 'minimap_mode', 0),
+                             'hide_in_editor': getattr(unit, 'hide_in_editor', 1)}
+    return unitConstInfo
+
 def getTechName(data: DatFile, langStrings: dict[int, str]):
     techsName = {}
     for id, tech in enumerate(data.techs):

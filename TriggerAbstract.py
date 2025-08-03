@@ -55,7 +55,10 @@ def getConditionInverted(inverted:int) -> str:
         return TEXT['fmtStringNot']
     
 def getUnitAbstract(unit: int) -> str:
-    return f'<U{unit}>'
+    if unit == -1:
+        return TEXT['comboValueNone']
+    else:
+        return f'<U{unit}>'
 
 def getUnitsAbstract(units: list[int], max: int | None=None) -> str:
     if len(units) == 0:
@@ -73,7 +76,10 @@ def getUnitsAbstract(units: list[int], max: int | None=None) -> str:
 
 def getUnitListName(unitList: int) -> str:
     """Get the localized name of a unit based on its ID."""
-    return UNIT_NAME.get(unitList, f'<UL{unitList}>')
+    if unitList == -1:
+        return TEXT['comboValueNone']
+    else:
+        return UNIT_NAME.get(unitList, {'name': f'<UL{unitList}>'})['name']
 
 def getUnitListGroupTypeAbstract(unitList: int, unitGroup: int,
                                  unitType: int) -> str:

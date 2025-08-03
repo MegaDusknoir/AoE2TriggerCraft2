@@ -100,6 +100,7 @@ class UnitView(ttk.Frame):
         self.cbUPlayerFilter.update_mapping(playerDictEx)
         self.cbUPlayerFilter.current(0)
         self.app.fUnitInfo.cbUPlayer.update_mapping(playerDict)
+        self.app.fUnitInfo.unitFocus = None
 
     def getUnitById(self, id, firstSearchPlayer=0) -> Unit:
         """Get Unit object by reference_id, search every player to find the unit."""
@@ -122,8 +123,6 @@ class UnitView(ttk.Frame):
     def __selectUnit(self, e):
         unit = self.getUnitFocus()
         self.app.fUnitInfo.unitFocus = unit
-        if unit == None:
-            return
         if unit is not None:
             self.app.fUnitInfo.unitSelected(unit)
             self.app.nTabsRightBottom.select(self.app.fUnitInfo)

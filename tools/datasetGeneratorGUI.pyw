@@ -119,7 +119,7 @@ class DatasetGeneratorWindow():
                 langPath = f'{rootPath}/resources/{check[0]}/strings/key-value/key-value-strings-utf8.txt'
                 destPath = f'{self.dstPath}/{key}'
                 langDict = gen.parseLanguageText(langPath)
-                unitName = gen.getUnitName(dataObj, langDict)
+                unitName = gen.getUnitConstInfo(dataObj, langDict)
                 techName = gen.getTechName(dataObj, langDict)
                 tributeName = gen.getTributeName(dataObj, langDict)
                 if os.path.isdir(destPath) == False:

@@ -251,9 +251,17 @@ class TCWindow():
         self.nTabsLeft.pack(fill=BOTH, expand=True, padx=(0, self.dpi(5)))
 
     def __createPanedWindowRight(self):
+        # Divide the right window by T-B layout
+        self.pwRight = ttk.PanedWindow(self.fPwRight, orient=VERTICAL)
+        self.fPwRT = ttk.Frame(self.pwRight)
+        self.fPwRB = ttk.Frame(self.pwRight)
+        self.pwRight.add(self.fPwRT, weight=3)
+        self.pwRight.add(self.fPwRB, weight=1)
+        self.pwRight.pack(fill=BOTH, expand=True, padx=self.dpi((5, 0)))
+
         # Right pw is T-B layout
-        self.nTabsRightTop = ttk.Notebook(self.fPwRight, width=400, height=200)
-        self.nTabsRightBottom = ttk.Notebook(self.fPwRight)
+        self.nTabsRightTop = ttk.Notebook(self.fPwRT, width=400, height=200)
+        self.nTabsRightBottom = ttk.Notebook(self.fPwRB)
 
         self.fMapViewTab = MapView(self, self.nTabsRightTop)
         self.nTabsRightTop.add(self.fMapViewTab, text=TEXT['tabMapView'])
@@ -266,11 +274,8 @@ class TCWindow():
         self.nTabsRightBottom.add(self.fCeInfo, text=TEXT['tabEffectInfo'], state="disabled")
         self.nTabsRightBottom.add(self.fUnitInfo, text=TEXT['tabUnitInfo'])
 
-        self.nTabsRightTop.grid(column=0, row=0, sticky=NSEW, padx=(self.dpi(5), 0), pady=(0, self.dpi(10)))
-        self.nTabsRightBottom.grid(column=0, row=1, sticky=NSEW, padx=(self.dpi(5), 0), pady=(self.dpi(10), 0))
-        self.fPwRight.grid_rowconfigure(0,weight=2)
-        self.fPwRight.grid_rowconfigure(1,weight=1)
-        self.fPwRight.grid_columnconfigure(0,weight=1)
+        self.nTabsRightTop.pack(fill=BOTH, expand=True, padx=0, pady=self.dpi((0, 5)))
+        self.nTabsRightBottom.pack(fill=BOTH, expand=True, padx=0, pady=self.dpi((5, 0)))
 
     def __createMenu(self):
         self.menuRoot = ttk.Menu(self.root)
@@ -340,6 +345,7 @@ class TCWindow():
         self.__createMainWindow()
 
         self.root.title(f"{TEXT['titleMainWindow']} - [{self.windowTitleTail}]")
+        self.main.update_idletasks()
         self.readScenario()
 
     def changeLanguage(self, lang: str) -> None:
