@@ -4,7 +4,7 @@ import ttkbootstrap as ttk
 
 class GlobalOptions():
     def __init__(self, workDir: str):
-        self.baseDir = workDir
+        self._baseDir = workDir
         self.enableOverwritingSource = ttk.BooleanVar(value=False)
         self.createBackupWhenOverwritingSource = ttk.BooleanVar(value=True)
 
@@ -15,7 +15,7 @@ class GlobalOptions():
         self.nameGaiaFix = ttk.StringVar(value="(GAIA)")
 
         self.addDuplicateMark = ttk.BooleanVar(value=False)
-        self.load(f'{self.baseDir}/config.json')
+        self.load(f'{self._baseDir}/config.json')
 
     def load(self, file):
         jsonValid = False
@@ -36,7 +36,7 @@ class GlobalOptions():
             self.dump(file)
 
     def dump(self, file):
-        attrs = [member for member in dir(self) if not callable(getattr(self, member)) and not member.startswith("__")]
+        attrs = [member for member in dir(self) if not callable(getattr(self, member)) and not member.startswith("_")]
         dump = {'GlobalOptions': {}}
         for attr in attrs:
             dump['GlobalOptions'][attr] = getattr(self, attr).get()

@@ -62,9 +62,7 @@ else:
     workDir = os.path.dirname(os.path.abspath(__file__))
 
 ASPSettings.ENABLE_XS_CHECK_INTEGRATION = False
-
-# allow asp to overwriting source, but not this version 0.4.6
-# ASPSettings.ALLOW_OVERWRITING_SOURCE = True
+ASPSettings.ALLOW_OVERWRITING_SOURCE = True
 
 class CreateIcon():
     def __init__(self):
