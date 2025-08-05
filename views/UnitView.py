@@ -14,6 +14,21 @@ from TriggerAbstract import getPlayerAbstract, getUnitListName
 if TYPE_CHECKING:
     from main import TCWindow
 
+class UnitKey():
+    def __init__(self, player: int, index: int):
+        self.player = player
+        self.index = index
+
+    def __eq__(self, rhs: UnitKey) -> bool:
+        return self.player == rhs.player and self.index == rhs.index
+
+    @classmethod
+    def fromTuple(cls, keyTuple: tuple[int, int]):
+        return cls(keyTuple[0], keyTuple[1])
+
+    def getUnit(self, um: UnitManager) -> Unit:
+        return um.units[self.player][self.index]
+
 class UnitTreeView(ttk.Treeview):
     """
     A Treeview shows units.
@@ -23,25 +38,38 @@ class UnitTreeView(ttk.Treeview):
     def __init__(self, master=None, show=ttk.TREE, selectmode=EXTENDED, columns=(0), **kwargs):
         super().__init__(master, show=show, selectmode=selectmode, columns=columns, **kwargs)
 
-    def insert(self, parent, index, uId:int, ulId:int, **kwargs):
+    def insert(self, parent, index, uId:int, ulId:int, pId:int, listId:int, **kwargs):
         return super().insert(parent, index, text=f'{uId}',
-                              values=(getUnitListName(ulId), ), **kwargs)
+                              values=(getUnitListName(ulId), pId, listId), **kwargs)
 
-    def getNodeId(self, item:str) -> int:
+    def getNodeUnitKey(self, item:str) -> UnitKey:
+        return UnitKey.fromTuple(self.item(item)['values'][1:3])
+
+    def getUnitFocusKey(self) -> UnitKey | None:
+        focusUnit = self.focus()
+        if focusUnit == '' or len(self.selection()) == 0:
+            return None
+        return self.getNodeUnitKey(focusUnit)
+
+    def getNodeRefId(self, item:str) -> int:
         return int(self.item(item)['text'])
 
-    def setNodeConst(self, item:str, ulId: int):
-        self.item(item, values=(getUnitListName(ulId), ))
+    def setNodeRefId(self, item:str, uId: int):
+        self.item(item, text=f'{uId}')
 
-    def getUnitFocusId(self) -> int | None:
+    def getUnitFocusRefId(self) -> int | None:
         focusUnit = self.focus()
         if focusUnit == '' or len(self.selection()) == 0:
             return None
         return int(self.item(focusUnit)['text'])
 
-    def getUnitsSelectionId(self) -> list[int]:
+    def getUnitsSelectionRefId(self) -> list[int]:
         selectedUnits = self.selection()
         return [int(self.item(unitItem)['text']) for unitItem in selectedUnits]
+
+    def setNodeConst(self, item:str, ulId: int):
+        key = self.getNodeUnitKey(item)
+        self.item(item, values=(getUnitListName(ulId), key.player, key.index))
 
 class UnitView(ttk.Frame):
     @property
@@ -113,18 +141,11 @@ class UnitView(ttk.Frame):
                 break
         return unit
 
-    def getUnitFocus(self) -> Unit:
-        unitId = self.tvUnitList.getUnitFocusId()
-        if unitId == None:
-            return None
-        playerFilter = self.varUPlayerFilter.get()
-        return self.getUnitById(unitId, playerFilter if playerFilter >= 0 else 0)
-
     def __selectUnit(self, e):
-        unit = self.getUnitFocus()
-        self.app.fUnitInfo.unitFocus = unit
-        if unit is not None:
-            self.app.fUnitInfo.unitSelected(unit)
+        key = self.tvUnitList.getUnitFocusKey()
+        self.app.fUnitInfo.unitFocus = key
+        if key is not None:
+            self.app.fUnitInfo.unitSelected(key.getUnit(self.um))
             self.app.nTabsRightBottom.select(self.app.fUnitInfo)
 
     def __modifyUnitFilter(self, *args):
@@ -138,14 +159,15 @@ class UnitView(ttk.Frame):
         for item in self.tvUnitList.get_children():
             self.tvUnitList.delete(item)
         if playerFilter >= 0:
-            units = self.um.get_player_units(playerFilter)
+            playerList = [playerFilter, ]
         elif playerFilter == -2:
-            units = self.um.get_all_units()
+            playerList = [p for p in range(0, self.app.activeScenario.player_manager.active_players + 1)]
         else:
             return
-        for unit in units:
-            if areaFilter:
-                if unit.x >= x1 and unit.x < x2 and unit.y >= y1 and unit.y < y2:
-                    self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const)
-            else:
-                self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const)
+        for player in playerList:
+            for listId, unit in enumerate(self.um.units[player]):
+                if areaFilter:
+                    if unit.x >= x1 and unit.x < x2 and unit.y >= y1 and unit.y < y2:
+                        self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const, player, listId)
+                else:
+                    self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const, player, listId)

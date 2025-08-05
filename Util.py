@@ -8,17 +8,68 @@ import tkinter as tk
 import PIL.Image
 import PIL.ImageTk
 
+class ResourcesFileError(Exception):
+    pass
+
+class OpenResourcesFile():
+    def __init__(self, path: str, mode='r', **kwargs):
+        self.path = path
+        self.mode = mode
+        self.kwargs = kwargs
+        self.file = None
+        self.error = None
+
+    def __enter__(self):
+        try:
+            self.file = open(self.path, self.mode, **self.kwargs)
+            return self.file
+        except (FileNotFoundError, PermissionError) as e:
+            return None
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.file:
+            self.file.close()
+
+def int32_cast(val: int) -> int:
+    val &= 0xFFFFFFFF
+    if val & 0x80000000:
+        return val - 0x100000000
+    return val
+
+def uint32_cast(val: int) -> int:
+    val &= 0xFFFFFFFF
+    return val
+
 class ReCompiled():
+    MATCH_INPUT_INT_RE = None
+    @classmethod
+    def matchInputInteger(cls, code: str) -> str | None:
+        """Match a inputing integer, allow '' and '-' """
+        if cls.MATCH_INPUT_INT_RE == None:
+            cls.MATCH_INPUT_INT_RE = re.compile(
+                r'''
+                ^       # 匹配字符串的起始位置
+                -?      # 匹配 0 个或 1 个负号（即可有可无的负号）
+                \d*     # 匹配 0 个或多个数字字符（digit，等价于 [0-9]）
+                $       # 匹配字符串的结束位置
+                ''',
+                re.VERBOSE
+            )
+        match = cls.MATCH_INPUT_INT_RE.search(code)
+        if match:
+            return match.group(0)
+        return None
+
     MATCH_INT_RE = None
     @classmethod
     def matchInteger(cls, code: str) -> str | None:
-        """限定文本为整数"""
+        """Match a strict integer, ensure int() """
         if cls.MATCH_INT_RE == None:
             cls.MATCH_INT_RE = re.compile(
                 r'''
                 ^       # 匹配字符串的起始位置
                 -?      # 匹配 0 个或 1 个负号（即可有可无的负号）
-                \d*     # 匹配 0 个或多个数字字符（digit，等价于 [0-9]）
+                \d+     # 匹配 1 个或多个数字字符（digit，等价于 [0-9]）
                 $       # 匹配字符串的结束位置
                 ''',
                 re.VERBOSE
@@ -90,6 +141,9 @@ class ZoomImageViewer(tk.Canvas):
         # 平移偏移（图像相对canvas的偏移）
         self.offset_x = 0
         self.offset_y = 0
+
+        self._last_x = 0
+        self._last_y = 0
 
     def __default_transform(self, origin: PIL.Image.Image, zoom: float) -> PIL.Image.Image:
         display_w = int(origin.width * zoom)
@@ -368,7 +422,7 @@ class MappedCombobox(ttk.Combobox):
         self._updating_int = True
         if val in self.inverse_mapping:
             self.variable.set(self.inverse_mapping[val])
-        elif val.isdigit() or val.lstrip('-').isdigit():
+        elif ReCompiled.matchInteger(val) is not None:
             self.variable.set(int(val))
         # 若输入非法，保持原值不变
         self._updating_int = False

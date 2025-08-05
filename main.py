@@ -46,6 +46,7 @@ from views.TriggerView import TriggerView
 from views.UnitInfo import UnitInfoView
 from views.UnitView import UnitView
 from views.MapView import MapView
+from views.MetaView import MetaView
 from views.TriggerInfo import TriggerInfoView
 from views.CeInfo import CeInfoView
 from Util import IntListVar, MappedCombobox, ListValueButton, PairValueEntry, Tooltip, ValueSelectButton, ZoomImageViewer
@@ -99,7 +100,11 @@ class TCWindow():
         self.stdoutBack = sys.stdout
         sys.stdout = self.ioAgent
 
-        loadLocalizedText(workDir)
+        try:
+            loadLocalizedText(workDir)
+        except ResourcesFileError as e:
+            messagebox.showerror('File Error', 'The application can not startup due to:\n\n{0}'.format(e.args[0]), icon='error')
+            sys.exit()
 
         self.root = ttk.Window(TEXT['titleMainWindow'], iconphoto=None)
         self.root.geometry(f'{self.dpi(1280)}x{self.dpi(720)}')
@@ -114,7 +119,7 @@ class TCWindow():
 
         self.__loadImages()
 
-        self.options = GlobalOptions()
+        self.options = GlobalOptions(workDir)
         self.wndLog = None
         self.__createMainWindow()
 
@@ -197,7 +202,7 @@ class TCWindow():
         try:
             with PIL.Image.open(path) as imgf:
                 return PIL.ImageTk.PhotoImage(imgf.resize(resize))
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             return PIL.ImageTk.PhotoImage(PIL.Image.new('RGB', resize))
 
     def __loadImages(self):
@@ -263,8 +268,11 @@ class TCWindow():
         self.nTabsRightTop = ttk.Notebook(self.fPwRT, width=400, height=200)
         self.nTabsRightBottom = ttk.Notebook(self.fPwRB)
 
+        self.fMetaViewTab = MetaView(self, self.nTabsRightTop)
         self.fMapViewTab = MapView(self, self.nTabsRightTop)
+        self.nTabsRightTop.add(self.fMetaViewTab, text=TEXT['tabMetaView'])
         self.nTabsRightTop.add(self.fMapViewTab, text=TEXT['tabMapView'])
+        self.nTabsRightTop.select(self.fMapViewTab)
 
         self.triggerManager: TriggerManager
         self.fTriggerInfo = TriggerInfoView(self, self.nTabsRightBottom)
@@ -350,8 +358,12 @@ class TCWindow():
 
     def changeLanguage(self, lang: str) -> None:
         """Change language setting and apply"""
-        loadLocalizedText(workDir, lang)
-        self.reinitialize()
+        try:
+            loadLocalizedText(workDir, lang)
+        except ResourcesFileError as e:
+            messagebox.showerror('File Error', 'Fail to change language due to:\n\n{0}'.format(e.args[0]), icon='error')
+        else:
+            self.reinitialize()
 
     def statusBarMessage(self, msg: str, update=False, layer: Literal['bottom', 'top'] = 'bottom') -> None:
         if layer == 'bottom':
@@ -468,6 +480,22 @@ class TCWindow():
         else:
             return False
 
+    def __saveScen(self, path):
+        try:
+            self.activeScenario.write_to_file(path)
+        except OverflowError as e:
+            if isinstance(e.args[0], str) and e.args[0] == 'int too big to convert':
+                messagebox.showerror(title=TEXT['titleSavefailed'],
+                                     message=TEXT['messageSavefailed'].format(TEXT['messageSavefailedByBadInteger']))
+            else:
+                messagebox.showerror(title=TEXT['titleSavefailed'], message=TEXT['messageSavefailed'].format(e))
+                raise e
+        except Exception as e:
+            messagebox.showerror(title=TEXT['titleSavefailed'], message=TEXT['messageSavefailed'].format(e))
+            raise e
+        else:
+            self.statusBarMessage(TEXT['noticeScenarioSaved'])
+
     def saveScenario(self, path=None):
         if path == None:
             path = self.openedScenPath
@@ -479,8 +507,7 @@ class TCWindow():
                 self.windowTitleTail = scenName
                 self.root.title(f"{TEXT['titleMainWindow']} - [{self.windowTitleTail}]")
         else:
-            self.activeScenario.write_to_file(path)
-            self.statusBarMessage(TEXT['noticeScenarioSaved'])
+            self.__saveScen(path)
 
     def saveAsScenario(self) -> str:
         saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveScenario'],
@@ -489,8 +516,7 @@ class TCWindow():
             scenName, scenExt = os.path.splitext(saveFilePath)
             if scenExt == '' and os.path.isfile(saveFilePath) == False:
                 saveFilePath += '.aoe2scenario'
-            self.activeScenario.write_to_file(saveFilePath)
-            self.statusBarMessage(TEXT['noticeScenarioSaved'])
+            self.__saveScen(saveFilePath)
         return saveFilePath
 
     def openScenario(self, path=None):
@@ -568,6 +594,7 @@ class TCWindow():
 
     def readScenario(self):
         self.root.title(f"{TEXT['titleMainWindow']} - [{self.windowTitleTail}]")
+        self.fMetaViewTab.loadMeta()
         self.fTEditor.loadTrigger()
         self.fMapViewTab.loadMapView()
         self.fUEditor.updatePlayerList()

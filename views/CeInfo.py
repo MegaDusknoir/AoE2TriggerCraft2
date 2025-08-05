@@ -508,7 +508,7 @@ class CeInfoView(ttk.Frame):
         def __setAttributeUnit(self) -> None:
             if self.outer.nTabsLeft.select() \
             and self.outer.nTabsLeft.index('current') == self.outer.nTabsLeft.index(self.outer.fUEditor):
-                unitId = self.outer.fUEditor.tvUnitList.getUnitFocusId()
+                unitId = self.outer.fUEditor.tvUnitList.getUnitFocusRefId()
                 if unitId == None:
                     unitId = -1
                 location = [-1, -1, unitId]
@@ -572,32 +572,6 @@ class CeInfoView(ttk.Frame):
                     self.outer.fCeInfo.updateEffectTreeNode(curItem, ce)
 
     # endregion CEWidgets
-
-    # Todo: many exception
-    def _createUnitListSelectWindow(self, destVar: IntListVar):
-        # 选择单位种类
-        return
-        dialog = ttk.Toplevel('选择单位', self.app.main)
-        dialog.grab_set()  # 独占窗口
-        dialog.protocol("WM_DELETE_WINDOW", lambda: _close_dialog(dialog))  # 捕捉关闭事件
-        ttk.Label(dialog, text="请输入一个数值:").pack(pady=10)
-        entry = ttk.Entry(dialog)
-        entry.insert(0, str(destVar.get()))
-        entry.pack(pady=5)
-
-        def on_confirm():
-            new_value = entry.get()
-            destVar.set([new_value,new_value,new_value])
-            _close_dialog(dialog)
-
-        ttk.Button(dialog, text="确认", command=on_confirm).pack(pady=10)
-
-        dialog.transient(self)  # 窗口置顶
-        entry.focus()
-
-        def _close_dialog(dialog: ttk.Toplevel):
-            dialog.grab_release()
-            dialog.destroy()
 
     def __constructEffectComboboxDicts(self, attribute: str) -> dict[int, str]:
         match attribute:

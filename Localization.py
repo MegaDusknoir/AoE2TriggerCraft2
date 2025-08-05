@@ -3,11 +3,14 @@ import json
 import locale
 import os
 
+from Util import OpenResourcesFile, ResourcesFileError
+
 class LanguageDict(dict):
     def __missing__(self, key):
         return f'<{key}>' if key not in self.PREDEFINE_DICT_NAMES else LanguageDict()
 
     PREDEFINE_DICT_NAMES = [
+        'messageNames',
         'noticeValueAspSectionName',
         'conditionAttributeName',
         'conditionName',
@@ -56,26 +59,33 @@ def keys_to_int(obj):
     return obj
 
 def loadLocalizationDefines(workDir: str):
-    if not os.path.isfile(f'{workDir}/resources/Localization.json'):
-        raise FileNotFoundError(f"Localization defines file not found.")
-    with open(f'{workDir}/resources/Localization.json', 'r', encoding='utf-8') as config:
-        definesDict = json.load(config)
-    if isinstance(definesDict, dict):
-        defines = definesDict.get('languages', [])
-        if len(defines) != 0:
-            for define in defines:
-                if isinstance(define, dict):
-                    if isinstance(define.get('name'), str) \
-                        and isinstance(define.get('code'), str):
-                        LOCALIZATION_DEFINES[:] = defines
-                    else:
-                        raise TypeError(f"Localization defines format illegal.")
-                else:
-                    raise TypeError(f"Localization defines format illegal.")
+
+    def definesDictCheck(dic: dict) -> bool:
+        if not isinstance(dic, dict):
+            return False
+        defines = dic.get('languages', [])
+        if len(defines) == 0:
+            return False
+        for define in defines:
+            if not isinstance(define, dict):
+                return False
+            if not isinstance(define.get('name', None), str) \
+                or not isinstance(define.get('code', None), str):
+                return False
+        LOCALIZATION_DEFINES[:] = defines
+        return True
+
+    with OpenResourcesFile(f'{workDir}/resources/Localization.json', encoding='utf-8') as fp:
+        if fp:
+            try:
+                definesDict = json.load(fp)
+            except json.decoder.JSONDecodeError:
+                raise ResourcesFileError(f"Localization defines format illegal.") from None
         else:
-            raise FileNotFoundError(f"Nothing in localization defines file.")
-    else:
-        raise TypeError(f"Localization defines format illegal.")
+            raise ResourcesFileError(f"Localization defines file not found / can not be accessed.")
+
+    if not definesDictCheck(definesDict):
+        raise ResourcesFileError(f"Localization defines format illegal.")
 
 def loadLocalizedText(workDir: str, lang: str='auto') -> None:
     """Load localized text based on the system locale."""
@@ -87,11 +97,12 @@ def loadLocalizedText(workDir: str, lang: str='auto') -> None:
         lang = locale.getdefaultlocale()[0]
     if os.path.isfile(f'{workDir}/resources/{lang}/{lang}.json') == False:
         lang = LOCALIZATION_DEFINES[0]['code']
-        if os.path.isfile(f'{workDir}/resources/{lang}/{lang}.json') == False:
-            raise FileNotFoundError(f"Localization file not found.")
 
-    with open(f'{workDir}/resources/{lang}/{lang}.json', 'r', encoding='utf-8') as config:
-        localizedText[lang] = json.load(config, object_hook=keys_to_int)
+    with OpenResourcesFile(f'{workDir}/resources/{lang}/{lang}.json', encoding='utf-8') as fp:
+        if fp:
+            localizedText[lang] = json.load(fp, object_hook=keys_to_int)
+        else:
+            raise ResourcesFileError(f"Localization file not found.")
     TEXT.clear()
     TEXT.update(localizedText[lang])
 
@@ -101,15 +112,15 @@ def loadLocalizedText(workDir: str, lang: str='auto') -> None:
         CONDITION_NAME[int(key)] = TEXT['conditionName'][key]
     for key in TEXT['effectName']:
         EFFECT_NAME[int(key)] = TEXT['effectName'][key]
-    if os.path.isfile(f'{localizationPath}/TechsName.json'):
-        with open(f'{localizationPath}/TechsName.json', 'r', encoding='utf-8') as config:
-            TECH_NAME.update(json.load(config, object_hook=keys_to_int))
-    if os.path.isfile(f'{localizationPath}/UnitsName.json'):
-        with open(f'{localizationPath}/UnitsName.json', 'r', encoding='utf-8') as config:
-            UNIT_NAME.update(json.load(config, object_hook=keys_to_int))
-    if os.path.isfile(f'{localizationPath}/TributesName.json'):
-        with open(f'{localizationPath}/TributesName.json', 'r', encoding='utf-8') as config:
-            RESOURCE_NAME.update(json.load(config, object_hook=keys_to_int))
+    with OpenResourcesFile(f'{localizationPath}/TechsName.json', encoding='utf-8') as fp:
+        if fp:
+            TECH_NAME.update(json.load(fp, object_hook=keys_to_int))
+    with OpenResourcesFile(f'{localizationPath}/UnitsName.json', encoding='utf-8') as fp:
+        if fp:
+            UNIT_NAME.update(json.load(fp, object_hook=keys_to_int))
+    with OpenResourcesFile(f'{localizationPath}/TributesName.json', encoding='utf-8') as fp:
+        if fp:
+            RESOURCE_NAME.update(json.load(fp, object_hook=keys_to_int))
 
 def getConditionName(conditionType: int) -> str:
     """Get the localized name of a condition type."""

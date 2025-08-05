@@ -78,7 +78,7 @@ class TriggerInfoView(ttk.Frame):
             fTDescriptionStringTable,
             textvariable=self.varTDescriptionStringTable,
             validate="key",
-            validatecommand=(self.register(lambda v: ReCompiled.matchInteger(v) is not None), '%P')
+            validatecommand=(self.register(lambda v: ReCompiled.matchInputInteger(v) is not None), '%P')
         )
         self.varTDescriptionStringTable.trace_add('write', self.__modifyTriggerDescriptionStringTable)
         eTDescriptionStringTable.pack(side=RIGHT,fill=X,expand=YES)
@@ -99,7 +99,7 @@ class TriggerInfoView(ttk.Frame):
             fTShortDscrStringTable, 
             textvariable=self.varTShortDescriptionStringTable, 
             validate="key", 
-            validatecommand=(self.register(lambda v: ReCompiled.matchInteger(v) is not None), '%P')
+            validatecommand=(self.register(lambda v: ReCompiled.matchInputInteger(v) is not None), '%P')
         )
         self.varTShortDescriptionStringTable.trace_add('write', self.__modifyTriggerShortDescriptionStringTable)
         eTShortDscrStringTable.pack(side=RIGHT,fill=X,expand=YES)
@@ -193,10 +193,7 @@ class TriggerInfoView(ttk.Frame):
             triggerId = self.tl.getNodeId(curItem)[0]
             descriptionStringTable = self.varTDescriptionStringTable.get()
             if ReCompiled.matchInteger(descriptionStringTable) is not None:
-                if descriptionStringTable == '' or descriptionStringTable == '-':
-                    descriptionStringTable = -1
-                else:
-                    descriptionStringTable = int(descriptionStringTable)
+                descriptionStringTable = int(descriptionStringTable)
             else:
                 descriptionStringTable = -1
             self.tm.get_trigger(triggerId).description_stid = descriptionStringTable
@@ -207,10 +204,7 @@ class TriggerInfoView(ttk.Frame):
             triggerId = self.tl.getNodeId(curItem)[0]
             shortDescriptionStringTable = self.varTShortDescriptionStringTable.get()
             if ReCompiled.matchInteger(shortDescriptionStringTable) is not None:
-                if shortDescriptionStringTable == '' or shortDescriptionStringTable == '-':
-                    shortDescriptionStringTable = -1
-                else:
-                    shortDescriptionStringTable = int(shortDescriptionStringTable)
+                shortDescriptionStringTable = int(shortDescriptionStringTable)
             else:
                 shortDescriptionStringTable = -1
             self.tm.get_trigger(triggerId).short_description_stid = shortDescriptionStringTable

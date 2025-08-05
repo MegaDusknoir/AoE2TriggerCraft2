@@ -62,7 +62,7 @@ def getUnitAbstract(unit: int) -> str:
 
 def getUnitsAbstract(units: list[int], max: int | None=None) -> str:
     if len(units) == 0:
-        return getUnitAbstract(-1)
+        return TEXT['comboValueNone']
     elif len(units) == 1:
         return getUnitAbstract(units[0])
     else:

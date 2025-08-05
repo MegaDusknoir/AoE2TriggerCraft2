@@ -61,8 +61,14 @@ class MapView(ttk.Frame):
                             self.drawClear())
         self.zvMapView.bind('<Enter>', lambda e: self.app.statusBarMessage(TEXT['tooltipMapView'], layer='top'))
         self.zvMapView.bind('<Leave>', lambda e: self.app.statusBarMessage('', layer='top'))
-        # self.__redrawMap()
-        self.sizeMap = 200
+
+        # The bottom layer shows terrain
+        self.imgDotMapRaw: PIL.Image.Image = None
+
+        # The top layer shows units
+        self.imgUnitsDotLayer: PIL.Image.Image = None
+
+        self.sizeMap: int = None
         self.background = self.app.style.colors.bg
 
     def loadMapView(self):
@@ -72,16 +78,41 @@ class MapView(ttk.Frame):
             for x in range(0, self.mm.map_width):
                 tile = self.mm.get_tile(x, y)
                 self.imgDotMapRaw.putpixel((x,y), TERRAIN_PAL[tile.terrain_id])
+        self.loadUnitLayer()
+        self.__redrawMap()
+        self.zvMapView.see(*self.__inverseMapViewCoordinateConv((self.sizeMap // 2, self.sizeMap // 2)))
+
+    def loadUnitLayer(self):
         self.imgUnitsDotLayer = PIL.Image.new('RGBA', (self.sizeMap * 2 + 1, self.sizeMap * 2 + 1), (0,0,0,0))
         for unit in self.um.get_all_units():
             if UNIT_NAME[unit.unit_const]['minimap_mode'] in [1, 4]:
-                x = int(unit.x * 2 + 0.5)
-                y = int(unit.y * 2 + 0.5)
-                color = (*MapView.UNIT_DOT_PAL[unit.player], 255)
-                self.imgUnitsDotLayer.putpixel((x,y), color)
-        # Todo: redraw when unit modified
-        self.__redrawMap()
-        self.zvMapView.see(*self.__inverseMapViewCoordinateConv((self.sizeMap // 2, self.sizeMap // 2)))
+                if 0 <= unit.x < self.sizeMap and 0 <= unit.y < self.sizeMap:
+                    x = int(unit.x * 2 + 0.5)
+                    y = int(unit.y * 2 + 0.5)
+                    color = (*MapView.UNIT_DOT_PAL[unit.player], 255)
+                    self.imgUnitsDotLayer.putpixel((x,y), color)
+
+    def updateUnitLayer(self):
+        def __updateUnitLayer():
+            del self._unitLayerUpdate
+            self.zvMapView.set_image(self.zvMapView.original_image)
+
+        if not hasattr(self, '_unitLayerUpdate'):
+            self._unitLayerUpdate = self.after(200, __updateUnitLayer)
+
+    def updateUnitLayerDot(self, ux: float, uy: float):
+        if not (0 <= ux < self.sizeMap and 0 <= uy < self.sizeMap):
+            return
+        dot_x = int(ux * 2 + 0.5)
+        dot_y = int(uy * 2 + 0.5)
+        self.imgUnitsDotLayer.putpixel((dot_x,dot_y), (0,0,0,0))
+        for unit in self.um.get_all_units():
+            if UNIT_NAME[unit.unit_const]['minimap_mode'] in [1, 4]:
+                if 0 <= unit.x < self.sizeMap and 0 <= unit.y < self.sizeMap:
+                    if int(unit.x * 2 + 0.5) == dot_x and int(unit.y * 2 + 0.5) == dot_y:
+                        color = (*MapView.UNIT_DOT_PAL[unit.player], 255)
+                        self.imgUnitsDotLayer.putpixel((dot_x,dot_y), color)
+        self.updateUnitLayer()
 
     def __mapViewCoordinateConv(self, rhombus_xy: tuple[int, int]) -> tuple[int, int]:
         """Transpose the rhombus view coords to map coords"""

@@ -11,6 +11,7 @@ from AoE2ScenarioParser.objects.data_objects.unit import Unit
 from Localization import TEXT, UNIT_NAME
 from TriggerAbstract import getUnitListName, getUnitsAbstract
 from Util import IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, ReCompiled, Tooltip, ValueSelectButton
+from views.UnitView import UnitKey
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -27,7 +28,7 @@ class UnitInfoView(ttk.Frame):
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
         self.app = app
-        self.unitFocus: Unit = None
+        self.unitFocus: UnitKey = None
 
         #region Column 0
         """const, player, garrison"""
@@ -90,8 +91,9 @@ class UnitInfoView(ttk.Frame):
         self.eUStatus.grid(column=2, row=3, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
         lUReferenceId = ttk.Label(self, text=TEXT['labelUnitReferenceId'])
         lUReferenceId.grid(column=2, row=4, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
-        self.eURefId = self.__IntAttributeEntry(self.app, self, 'reference_id', state='disabled')
+        self.eURefId = self.__IntAttributeEntry(self.app, self, 'reference_id')
         self.eURefId.grid(column=2, row=5, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+        self.eURefId.set_display_event(lambda var=self.eURefId.variable: self.__modifyReferenceId(var))
         #endregion Column 2
 
         #region Column 3
@@ -117,14 +119,14 @@ class UnitInfoView(ttk.Frame):
 
         def modifyAttribute(self, attribute: str):
             try:
-                floatValue = int(self.variable.get())
+                intValue = int(self.variable.get())
             except ValueError:
-                floatValue = -1
+                intValue = -1
             else:
-                print(f'modifyAttribute {attribute} = {floatValue}')
-                unit = self.outer.fUnitInfo.unitFocus
-                if unit is not None:
-                    setattr(unit, attribute, floatValue)
+                print(f'modifyAttribute {attribute} = {intValue}')
+                if self.outer.fUnitInfo.unitFocus is not None:
+                    unit = self.outer.fUnitInfo.unitFocus.getUnit(self.outer.fUnitInfo.um)
+                    setattr(unit, attribute, intValue)
 
     class __FloatAttributeEntry(PairValueEntry):
         def __init__(self, outer: 'TCWindow', master, attribute: str, **kwargs):
@@ -140,25 +142,51 @@ class UnitInfoView(ttk.Frame):
                 floatValue = -1
             else:
                 print(f'modifyAttribute {attribute} = {floatValue}')
-                unit = self.outer.fUnitInfo.unitFocus
-                if unit is not None:
-                    setattr(unit, attribute, floatValue)
+                if self.outer.fUnitInfo.unitFocus is not None:
+                    unit = self.outer.fUnitInfo.unitFocus.getUnit(self.outer.fUnitInfo.um)
+                    if attribute in ['x', 'y']:
+                        old_x, old_y = unit.x, unit.y
+                        setattr(unit, attribute, floatValue)
+                        self.outer.fMapViewTab.updateUnitLayerDot(old_x, old_y)
+                        self.outer.fMapViewTab.updateUnitLayerDot(unit.x, unit.y)
+                    else:
+                        setattr(unit, attribute, floatValue)
 
     def __modifyUnitPlayer(self):
         if self.unitFocus is not None:
-            self.unitFocus.player = self.varUPlayer.get()
+            unit = self.unitFocus.getUnit(self.um)
+            unit.player = self.varUPlayer.get()
+            newIndex = self.um.units[unit.player].index(unit)
+            self.unitFocus = UnitKey(unit.player, newIndex)
+            self.app.fMapViewTab.updateUnitLayerDot(unit.x, unit.y)
 
     def __modifyUnitGarrison(self, garrison: int):
         if self.unitFocus is not None:
-            self.unitFocus.garrisoned_in_id = garrison
+            unit = self.unitFocus.getUnit(self.um)
+            unit.garrisoned_in_id = garrison
 
     def __modifyUnitConst(self, value: int):
         print(f'modifyAttribute unit_const = {value}')
         if self.unitFocus is not None:
-            self.unitFocus.unit_const = value
+            unit = self.unitFocus.getUnit(self.um)
+            unit.unit_const = value
             for item in self.ul.get_children(""):
-                if self.ul.getNodeId(item) == self.unitFocus.reference_id:
-                    self.ul.setNodeConst(item, self.unitFocus.unit_const)
+                if self.ul.getNodeUnitKey(item) == self.unitFocus:
+                    self.ul.setNodeConst(item, unit.unit_const)
+            self.app.fMapViewTab.updateUnitLayerDot(unit.x, unit.y)
+
+    def __modifyReferenceId(self, var: ttk.StringVar):
+        try:
+            intValue = int(var.get())
+        except ValueError:
+            return
+        print(f'modifyReferenceId = {intValue}')
+        if self.unitFocus is not None:
+            unit = self.unitFocus.getUnit(self.um)
+            unit.reference_id = intValue
+            for item in self.ul.get_children(""):
+                if self.ul.getNodeUnitKey(item) == self.unitFocus:
+                    self.ul.setNodeRefId(item, unit.reference_id)
 
     def unitSelected(self, unit: Unit):
         self.btnUConst.variable.set(unit.unit_const)
@@ -195,7 +223,7 @@ class UnitsSelectButton(ttk.Frame):
     def __setMultipleUnits(self) -> None:
         if self.outer.nTabsLeft.select() \
         and self.outer.nTabsLeft.index('current') == self.outer.nTabsLeft.index(self.outer.fUEditor):
-            unitsId = self.outer.fUEditor.tvUnitList.getUnitsSelectionId()
+            unitsId = self.outer.fUEditor.tvUnitList.getUnitsSelectionRefId()
             self.lvbtn.internal_var.set(unitsId)
         else:
             self.outer.nTabsLeft.select(self.outer.fUEditor)
@@ -203,7 +231,7 @@ class UnitsSelectButton(ttk.Frame):
     def __setSingleUnits(self) -> None:
         if self.outer.nTabsLeft.select() \
         and self.outer.nTabsLeft.index('current') == self.outer.nTabsLeft.index(self.outer.fUEditor):
-                unitId = self.outer.fUEditor.tvUnitList.getUnitFocusId()
+                unitId = self.outer.fUEditor.tvUnitList.getUnitFocusRefId()
                 if unitId == None:
                     unitId = -1
                 self.lvbtn.internal_var.set([unitId, ])

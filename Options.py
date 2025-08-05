@@ -3,7 +3,8 @@ import os
 import ttkbootstrap as ttk
 
 class GlobalOptions():
-    def __init__(self):
+    def __init__(self, workDir: str):
+        self.baseDir = workDir
         self.enableOverwritingSource = ttk.BooleanVar(value=False)
         self.createBackupWhenOverwritingSource = ttk.BooleanVar(value=True)
 
@@ -14,7 +15,7 @@ class GlobalOptions():
         self.nameGaiaFix = ttk.StringVar(value="(GAIA)")
 
         self.addDuplicateMark = ttk.BooleanVar(value=False)
-        self.load('config.json')
+        self.load(f'{self.baseDir}/config.json')
 
     def load(self, file):
         jsonValid = False
