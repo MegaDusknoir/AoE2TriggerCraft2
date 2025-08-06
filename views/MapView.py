@@ -13,7 +13,7 @@ from PIL.Image import Resampling
 from AoE2ScenarioParser.objects.managers.map_manager import MapManager
 from Localization import TEXT, UNIT_NAME
 from TerrainPal import TERRAIN_PAL
-from Util import ZoomImageViewer
+from Util import ZoomImageViewer, fastAoERotate
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -147,14 +147,11 @@ class MapView(ttk.Frame):
 
     def __rotateMap(self, image:PIL.Image.Image, zoom: float) -> PIL.Image.Image:
         """Transform a dot map to zoomed rhombus view"""
-        zoomed_width = int(image.width * zoom)
         image = image.resize((image.width * 4,)*2, resample=Resampling.NEAREST)
         unitLayer = self.imgUnitsDotLayer.resize((self.imgUnitsDotLayer.width * 2,)*2,
                                                   resample=Resampling.NEAREST)
         image.paste(unitLayer, (-int(1),)*2, unitLayer)
-        image = image.resize((zoomed_width,)*2, resample=Resampling.NEAREST)
-        image = image.rotate(45,expand=True, fillcolor=self.background)
-        image = image.resize((image.width, int(image.height/2)), resample=Resampling.NEAREST)
+        image = fastAoERotate(image, zoom / 4, fillcolor=self.background)
         return image
 
     def __redrawMap(self):

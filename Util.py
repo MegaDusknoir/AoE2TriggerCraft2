@@ -1,3 +1,4 @@
+import math
 import re
 import time
 import tkinter as tk
@@ -78,6 +79,43 @@ class ReCompiled():
         if match:
             return match.group(0)
         return None
+
+def fastAoERotate(image: PIL.Image.Image, scale: float, fillcolor=(255, 255, 255)) -> PIL.Image.Image:
+    """
+    Fast transform for MapView, equivalent to:
+    ```
+    image = image.resize((image.size[0]*scale,)*2, resample=Resampling.NEAREST)
+    image = image.rotate(45,expand=True, fillcolor=fillcolor)
+    image = image.resize((image.size[0], int(image.size[0]/2)), resample=Resampling.NEAREST)
+    return image
+    ```
+    """
+    width = image.size[0]
+    sqrt2 = math.sqrt(2)
+
+    # 计算中间尺寸
+    w1 = width * scale  # 放大后尺寸
+    w2 = w1 * sqrt2  # 旋转后理论尺寸
+    dest_width = round(w2)  # 旋转后实际宽度
+    dest_height = round(w2 / 2)  # 最终高度
+
+    # 计算组合变换矩阵的参数 (6-tuple)
+    a = sqrt2 / scale / 2
+    b = -sqrt2 / scale
+    c = width / 2          # 水平平移补偿
+    d = sqrt2 / scale / 2
+    e = sqrt2 / scale
+    f = -width / 2         # 垂直平移补偿
+
+    # 单步变换
+    image = image.transform(
+        (dest_width, dest_height),
+        PIL.Image.AFFINE,
+        (a, b, c, d, e, f),
+        resample=PIL.Image.NEAREST,
+        fillcolor=fillcolor
+    )
+    return image
 
 class ZoomImageViewer(tk.Canvas):
     def coords_conv(self, x: int, y: int) -> tuple[float, float]:
