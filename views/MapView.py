@@ -9,10 +9,12 @@ import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageTk
 from PIL.Image import Resampling
+from PIL import ImageColor
 
 from AoE2ScenarioParser.objects.managers.map_manager import MapManager
 from Localization import TEXT, UNIT_NAME
 from TerrainPal import TERRAIN_PAL
+from CommonPalette import AOE_PAL
 from Util import ZoomImageViewer, fastAoERotate
 
 if TYPE_CHECKING:
@@ -77,7 +79,7 @@ class MapView(ttk.Frame):
         for y in range(0, self.mm.map_height):
             for x in range(0, self.mm.map_width):
                 tile = self.mm.get_tile(x, y)
-                self.imgDotMapRaw.putpixel((x,y), TERRAIN_PAL[tile.terrain_id])
+                self.imgDotMapRaw.putpixel((x,y), TERRAIN_PAL[tile.terrain_id][tile.elevation])
         self.loadUnitLayer()
         self.__redrawMap()
         self.zvMapView.see(*self.__inverseMapViewCoordinateConv((self.sizeMap // 2, self.sizeMap // 2)))
@@ -89,7 +91,12 @@ class MapView(ttk.Frame):
                 if 0 <= unit.x < self.sizeMap and 0 <= unit.y < self.sizeMap:
                     x = int(unit.x * 2 + 0.5)
                     y = int(unit.y * 2 + 0.5)
-                    color = (*MapView.UNIT_DOT_PAL[unit.player], 255)
+                    if UNIT_NAME[unit.unit_const]['minimap_color'] == 0:
+                        color = (*MapView.UNIT_DOT_PAL[unit.player], 255)
+                    else:
+                        color = (*ImageColor.getcolor(
+                            AOE_PAL[UNIT_NAME[unit.unit_const]['minimap_color']],
+                            "RGB"), 255)
                     self.imgUnitsDotLayer.putpixel((x,y), color)
 
     def updateUnitLayer(self):
@@ -110,7 +117,12 @@ class MapView(ttk.Frame):
             if UNIT_NAME[unit.unit_const]['minimap_mode'] in [1, 4]:
                 if 0 <= unit.x < self.sizeMap and 0 <= unit.y < self.sizeMap:
                     if int(unit.x * 2 + 0.5) == dot_x and int(unit.y * 2 + 0.5) == dot_y:
-                        color = (*MapView.UNIT_DOT_PAL[unit.player], 255)
+                        if UNIT_NAME[unit.unit_const]['minimap_color'] == 0:
+                            color = (*MapView.UNIT_DOT_PAL[unit.player], 255)
+                        else:
+                            color = (*ImageColor.getcolor(
+                                AOE_PAL[UNIT_NAME[unit.unit_const]['minimap_color']],
+                                "RGB"), 255)
                         self.imgUnitsDotLayer.putpixel((dot_x,dot_y), color)
         self.updateUnitLayer()
 

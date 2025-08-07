@@ -56,6 +56,7 @@ def getUnitConstInfo(data: DatFile, langStrings: dict[int, str]):
                     unitsName = f'<Unit{id}>'
         unitConstInfo[id] = {'name': unitsName,
                              'minimap_mode':getattr(unit, 'minimap_mode', 0),
+                             'minimap_color':getattr(unit, 'minimap_color', 0),
                              'hide_in_editor': getattr(unit, 'hide_in_editor', 1)}
     return unitConstInfo
 

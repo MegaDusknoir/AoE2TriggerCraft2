@@ -6,8 +6,7 @@ from tkinter.constants import *
 import ttkbootstrap as ttk
 from ttkbootstrap.scrolled import ScrolledText
 
-from Localization import TEXT, UNIT_NAME
-from TerrainPal import TERRAIN_PAL
+from Localization import TEXT
 from Util import PairValueEntry, ReCompiled, int32_cast, uint32_cast
 
 if TYPE_CHECKING:

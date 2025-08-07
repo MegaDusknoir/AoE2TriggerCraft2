@@ -4,6 +4,7 @@ import os
 import sys
 import re
 import json
+import jsonschema
 import base64
 import datetime
 import time
@@ -40,7 +41,6 @@ import AoE2ScenarioParser.settings as ASPSettings
 
 from Localization import *
 from Options import GlobalOptions, ScenarioOptions
-from TerrainPal import TERRAIN_PAL
 from TriggerAbstract import *
 from views.TriggerView import TriggerView
 from views.UnitInfo import UnitInfoView
@@ -81,6 +81,212 @@ class RedirectIO(TextIO):
     def __init__(self):
         super().__init__()
         self.write = super().write
+
+class TriggerJsonIO():
+    triggerAttributesSet = [
+        'name',
+        'trigger_id',
+        'description_stid',
+        'description',
+        'display_as_objective',
+        'description_order',
+        'short_description_stid',
+        'short_description',
+        'display_on_screen',
+        'enabled',
+        'looping',
+        'header',
+        'mute_objectives',
+        'condition_order',
+        'effect_order',
+        # 'conditions',
+        # 'effects',
+    ]
+
+    class TriggerJsonNotRestorableError(Exception):
+        pass
+
+    class TriggerJsonInvalidError(Exception):
+        pass
+
+    @classmethod
+    def export(cls, tm: TriggerManager, begin:int=None, end:int=None) -> dict:
+        if begin is None:
+            begin = 0
+        if end is None:
+            end = len(tm.triggers)
+
+        exportTriggerOrder = tm.trigger_display_order[begin:end]
+        selectTriggersId: list[int] = []
+        for id in exportTriggerOrder:
+            selectTriggersId.append(id)
+        selectTriggersId.sort()
+        triggersList = []
+        for i in selectTriggersId:
+            trigger = tm.triggers[i]
+            triggerDict = {}
+            for attr in cls.triggerAttributesSet:
+                triggerDict[attr] = getattr(trigger, attr)
+            triggerDict['conditions'] = []
+            triggerDict['effects'] = []
+            for condition in trigger.conditions:
+                conditionDict = {'condition_type': condition.condition_type}
+                for attr in CONDITION_ATTRIBUTES.get(condition.condition_type, []):
+                    conditionDict[attr] = getattr(condition, attr)
+                triggerDict['conditions'].append(conditionDict)
+            for effect in trigger.effects:
+                effectDict = {'effect_type': effect.effect_type}
+                for attr in EFFECT_ATTRIBUTES.get(effect.effect_type, []):
+                    effectDict[attr] = getattr(effect, attr)
+                triggerDict['effects'].append(effectDict)
+            triggersList.append(triggerDict)
+        triggersDump = {
+            'trigger_display_order':exportTriggerOrder,
+            'triggers': triggersList
+        }
+        return triggersDump
+
+    @classmethod
+    def append(cls, tm: TriggerManager, obj: dict):
+        if not cls.__validate(obj):
+            raise cls.TriggerJsonInvalidError("Trigger JSON invalid")
+        importTriggerOriginalIds = []
+        importTriggerIdMap = {}
+        importedTriggers = []
+        lengthBefore = len(tm.triggers)
+        newOrder = tm.trigger_display_order.copy()
+
+        for i, triggerDict in enumerate(obj['triggers']):
+            # ID in its source scenario
+            oldId = triggerDict['trigger_id']
+            importTriggerOriginalIds.append(oldId)
+            trigger:Trigger = tm.add_trigger(triggerDict['name'])
+            importedTriggers.append(trigger)
+            for attr in cls.triggerAttributesSet:
+                setattr(trigger, attr, triggerDict[attr])
+            # ID in current scenario
+            newId = i + lengthBefore
+            importTriggerIdMap[oldId] = newId
+            trigger.trigger_id = newId
+            for conditionDict in triggerDict['conditions']:
+                condition = trigger.new_condition.none()
+                condition.condition_type = conditionDict['condition_type']
+                for attr in CONDITION_ATTRIBUTES.get(condition.condition_type, []):
+                    setattr(condition, attr, conditionDict[attr])
+            for effectDict in triggerDict['effects']:
+                effect = trigger.new_effect.none()
+                effect.effect_type = effectDict['effect_type']
+                for attr in EFFECT_ATTRIBUTES.get(effect.effect_type, []):
+                    setattr(effect, attr, effectDict[attr])
+            trigger.condition_order = triggerDict['condition_order']
+            trigger.effect_order = triggerDict['effect_order']
+
+        # Redirect CEs in imported triggers, set to -1 if the target trigger not imported.
+        for trigger in importedTriggers:
+            for condition in trigger.conditions:
+                if condition.trigger_id in importTriggerOriginalIds:
+                    condition.trigger_id = importTriggerIdMap[condition.trigger_id]
+                else:
+                    condition.trigger_id = -1
+            for effect in trigger.effects:
+                if effect.trigger_id in importTriggerOriginalIds:
+                    effect.trigger_id = importTriggerIdMap[effect.trigger_id]
+                else:
+                    effect.trigger_id = -1
+
+        # Import trigger order for imported triggers
+        for id in obj['trigger_display_order']:
+            newOrder.append(importTriggerIdMap[id])
+        tm.trigger_display_order = newOrder
+
+    @classmethod
+    def restore(cls, tm: TriggerManager, obj: dict):
+        if not cls.__validate(obj):
+            raise cls.TriggerJsonInvalidError("Trigger JSON invalid")
+        if set(obj['trigger_display_order']) != set(range(len(obj['trigger_display_order']))):
+            raise cls.TriggerJsonNotRestorableError("Not a restorable Trigger JSON")
+        tm.remove_triggers([i for i in range(len(tm.triggers))])
+
+        for triggerDict in obj['triggers']:
+            trigger:Trigger = tm.add_trigger(triggerDict['name'])
+            for attr in cls.triggerAttributesSet:
+                setattr(trigger, attr, triggerDict[attr])
+            for conditionDict in triggerDict['conditions']:
+                condition = trigger.new_condition.none()
+                condition.condition_type = conditionDict['condition_type']
+                for attr in CONDITION_ATTRIBUTES.get(condition.condition_type, []):
+                    setattr(condition, attr, conditionDict[attr])
+            for effectDict in triggerDict['effects']:
+                effect = trigger.new_effect.none()
+                effect.effect_type = effectDict['effect_type']
+                for attr in EFFECT_ATTRIBUTES.get(effect.effect_type, []):
+                    setattr(effect, attr, effectDict[attr])
+            trigger.condition_order = triggerDict['condition_order']
+            trigger.effect_order = triggerDict['effect_order']
+        tm.trigger_display_order = obj['trigger_display_order']
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "trigger_display_order": {
+                "type": "array",
+                "items": {
+                    "type": "integer"
+                }
+            },
+            "triggers": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "condition_order": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "effect_order": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "conditions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        },
+                        "effects": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "required": [
+            "trigger_display_order",
+            "triggers"
+        ],
+        "additionalProperties": False
+    }
+
+    @classmethod
+    def __validate(cls, obj: dict) -> bool:
+        try:
+            jsonschema.validate(obj, cls.schema)
+        except jsonschema.ValidationError:
+            return False
+        length = len(obj['triggers'])
+        if len(obj['trigger_display_order']) != length:
+            return False
+        return True
 
 class TCWindow():
 
@@ -298,8 +504,11 @@ class TCWindow():
         self.menuFile.add_command(label=TEXT['menuExit'], command=self.windowClose)
         self.menuEdit = ttk.Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuEdit'], menu=self.menuEdit)
-        self.menuEdit.add_command(label=TEXT['menuExportTriggerToText'], command=self.exportTriggerToText, state='disabled')
-        self.menuEdit.add_command(label=TEXT['menuImportTriggerFromText'], command=self.importTriggerFromText, state='disabled')
+        self.menuEdit.add_command(label=TEXT['menuExportAllTriggerToText'], command=self.exportTriggerToText)
+        self.menuEdit.add_command(label=TEXT['menuImportAllTriggerFromText'], command=self.importTriggerFromText)
+        self.menuEdit.add_separator()
+        self.menuEdit.add_command(label=TEXT['menuExportTriggerToText'], command=self.exportSelTriggerToText)
+        self.menuEdit.add_command(label=TEXT['menuImportTriggerFromText'], command=self.addTriggerFromText)
         self.menuEdit.add_separator()
         self.menuEdit.add_command(label=TEXT['menuExportAllText'], command=lambda: print('ExportAllText'), state='disabled')
         self.menuEdit.add_command(label=TEXT['menuImportText'], command=lambda: print('ImportText'), state='disabled')
@@ -425,10 +634,106 @@ class TCWindow():
         self.wndAbout.grab_set()
 
     def exportTriggerToText(self):
-        print('exportTriggerToText')
+        if not self.openedScenPath:
+            initialFile = 'default.json'
+        else:
+            scenFolder, scenName = os.path.split(self.openedScenPath)
+            scenStem, scenExt = os.path.splitext(scenName)
+            initialFile = scenStem + '.json'
+        saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveTriggerJson'],
+                                         initialfile=initialFile,
+                                         filetypes=[('JSON', '*.json')])
+        if not saveFilePath:
+            return
+        jsonName, jsonExt = os.path.splitext(saveFilePath)
+        if not jsonExt and not os.path.isfile(saveFilePath):
+            saveFilePath += '.json'
+
+        tDump = TriggerJsonIO.export(self.triggerManager)
+        with open(saveFilePath, 'w', encoding='utf-8') as fp:
+            json.dump(tDump, fp, indent=4, ensure_ascii=False)
+        self.statusBarMessage(TEXT['noticeTriggerJsonSaved'])
 
     def importTriggerFromText(self):
-        print('importTriggerFromText')
+        openFilePath = askopenfilename(title=TEXT['titleSelectTriggerJson'],
+                                       filetypes=[('JSON', '*.json'), (TEXT['typeNameAll'], '*')])
+        triggersDump = None
+        if openFilePath == '':
+            return
+        with open(openFilePath, 'r', encoding='utf-8') as f:
+            try:
+                triggersDump = json.load(f)
+            except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
+            except Exception as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                raise e
+        if triggersDump:
+            try:
+                TriggerJsonIO.restore(self.triggerManager, triggersDump)
+            except TriggerJsonIO.TriggerJsonInvalidError:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
+            except TriggerJsonIO.TriggerJsonNotRestorableError:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonNotRestorableError'])
+            except Exception as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                raise e
+            else:
+                self.fTEditor.loadTrigger()
+                self.statusBarMessage(TEXT['noticeTriggerJsonRestored'])
+
+    def exportSelTriggerToText(self):
+        valueRange = self.fTEditor.getRangeValue()
+        if type(valueRange) == str:
+            messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageValueRangeInvalid'].format(valueRange))
+            return
+        displayIdBegin, displayIdEnd, displayIdTarget = valueRange
+
+        if not self.openedScenPath:
+            initialFile = 'default.json'
+        else:
+            scenFolder, scenName = os.path.split(self.openedScenPath)
+            scenStem, scenExt = os.path.splitext(scenName)
+            initialFile = scenStem + '.json'
+        saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveTriggerJson'],
+                                         initialfile=initialFile,
+                                         filetypes=[('JSON', '*.json')])
+        if not saveFilePath:
+            return
+        jsonName, jsonExt = os.path.splitext(saveFilePath)
+        if not jsonExt and not os.path.isfile(saveFilePath):
+            saveFilePath += '.json'
+
+        tDump = TriggerJsonIO.export(self.triggerManager, displayIdBegin, displayIdEnd)
+        with open(saveFilePath, 'w', encoding='utf-8') as fp:
+            json.dump(tDump, fp, indent=4, ensure_ascii=False)
+        self.statusBarMessage(TEXT['noticeTriggerJsonSaved'])
+
+    def addTriggerFromText(self):
+        openFilePath = askopenfilename(title=TEXT['titleSelectTriggerJson'],
+                                       filetypes=[('JSON', '*.json'), (TEXT['typeNameAll'], '*')])
+        triggersDump = None
+        if openFilePath == '':
+            return
+        with open(openFilePath, 'r', encoding='utf-8') as f:
+            try:
+                triggersDump = json.load(f)
+            except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
+            except Exception as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                raise e
+        if triggersDump:
+            try:
+                TriggerJsonIO.append(self.triggerManager, triggersDump)
+            except TriggerJsonIO.TriggerJsonInvalidError:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
+            except Exception as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                raise e
+            else:
+                self.fTEditor.loadTrigger()
+                self.statusBarMessage(TEXT['noticeTriggerJsonAdded'])
 
     def itemSelect(self, event):
         curItem = self.fTEditor.tvTriggerList.focus()

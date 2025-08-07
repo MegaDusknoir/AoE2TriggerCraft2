@@ -23,7 +23,7 @@ class GlobalOptions():
             with open(file, 'r') as f:
                 try:
                     cfg = json.load(f)
-                except json.decoder.JSONDecodeError:
+                except (json.decoder.JSONDecodeError, UnicodeDecodeError):
                     cfg = {'GlobalOptions':{}}
                 else:
                     if 'GlobalOptions' in cfg:
@@ -41,7 +41,7 @@ class GlobalOptions():
         for attr in attrs:
             dump['GlobalOptions'][attr] = getattr(self, attr).get()
         with open(file, 'w') as f:
-            json.dump(dump, f, indent=4)
+            json.dump(dump, f, indent=4, ensure_ascii=False)
 
 class ScenarioOptions():
     def __init__(self):
