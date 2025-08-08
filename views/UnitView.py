@@ -15,6 +15,10 @@ if TYPE_CHECKING:
     from main import TCWindow
 
 class UnitKey():
+    """
+    The unit's owner ID and list index are its primary key.
+    NOT reference_id because of the possibility of duplication in some scenarios.
+    """
     def __init__(self, player: int, index: int):
         self.player = player
         self.index = index
@@ -34,6 +38,7 @@ class UnitTreeView(ttk.Treeview):
     A Treeview shows units.
 
     Node text holds the unit id, and values[0] holds the name.
+    values[1:] holds the UnitKey.
     """
     def __init__(self, master=None, show=ttk.TREE, selectmode=EXTENDED, columns=(0), **kwargs):
         super().__init__(master, show=show, selectmode=selectmode, columns=columns, **kwargs)
@@ -43,7 +48,7 @@ class UnitTreeView(ttk.Treeview):
                               values=(getUnitListName(ulId), pId, listId), **kwargs)
 
     def getNodeUnitKey(self, item:str) -> UnitKey:
-        return UnitKey.fromTuple(self.item(item)['values'][1:3])
+        return UnitKey(*self.item(item)['values'][1:3])
 
     def getUnitFocusKey(self) -> UnitKey | None:
         focusUnit = self.focus()
@@ -84,6 +89,10 @@ class UnitView(ttk.Frame):
     def um(self):
         return self.app.activeScenario.unit_manager
 
+    @property
+    def pm(self):
+        return self.app.activeScenario.player_manager
+
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
         self.app = app
@@ -121,7 +130,7 @@ class UnitView(ttk.Frame):
         self.tvUnitList.pack(side=RIGHT, fill=BOTH, expand=YES)
 
     def updatePlayerList(self):
-        playerDict = {i:getPlayerAbstract(i) for i in range(0, self.app.activeScenario.player_manager.active_players + 1)}
+        playerDict = {i:getPlayerAbstract(i) for i in range(0, self.pm.active_players + 1)}
         playerDictEx = {-1:TEXT['comboValueNone']}
         playerDictEx.update(playerDict)
         playerDictEx.update({-2:TEXT['comboValueAllPlayer']})
@@ -134,7 +143,7 @@ class UnitView(ttk.Frame):
         """Get Unit object by reference_id, search every player to find the unit."""
         # Search from selected player first
         playerList = [firstSearchPlayer, ] + \
-            [i for i in range(0, self.app.activeScenario.player_manager.active_players + 1) if i != firstSearchPlayer]
+            [i for i in range(0, self.pm.active_players + 1) if i != firstSearchPlayer]
         for p in playerList:
             unit = next((i for i in self.um.units[p] if i.reference_id == id), None)
             if unit != None:
@@ -161,7 +170,7 @@ class UnitView(ttk.Frame):
         if playerFilter >= 0:
             playerList = [playerFilter, ]
         elif playerFilter == -2:
-            playerList = [p for p in range(0, self.app.activeScenario.player_manager.active_players + 1)]
+            playerList = [p for p in range(0, self.pm.active_players + 1)]
         else:
             return
         for player in playerList:
@@ -171,3 +180,18 @@ class UnitView(ttk.Frame):
                         self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const, player, listId)
                 else:
                     self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const, player, listId)
+
+    def unitIdFilter(self, refIds: list[int]):
+        if refIds == []:
+            return
+        for item in self.tvUnitList.get_children():
+            self.tvUnitList.delete(item)
+        playerList = [p for p in range(0, self.pm.active_players + 1)]
+        for player in playerList:
+            for listId, unit in enumerate(self.um.units[player]):
+                if unit.reference_id in refIds:
+                    self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const, player, listId)
+        items = self.tvUnitList.get_children()
+        if items:
+            self.tvUnitList.focus(items[0])
+            self.tvUnitList.selection_set(items)

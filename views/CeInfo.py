@@ -517,9 +517,9 @@ class CeInfoView(ttk.Frame):
                 self.outer.nTabsLeft.select(self.outer.fUEditor)
 
         def __setAttributeArea(self) -> None:
+            x1, y1, x2, y2 = self.outer.fMapViewTab.pointSelect.get()
             if self.attribute == 'area_x1':
-                x1, y1, x2, y2 = *self.outer.fMapViewTab.pointSelect[0], *self.outer.fMapViewTab.pointSelect[1]
-                if self.outer.fMapViewTab.pointSelect[1] == (-1, -1):
+                if (x2, y2) == (-1, -1):
                     x2, y2 = x1, y1
                 if x1 > x2:
                     x1, x2 = x2, x1
@@ -527,7 +527,7 @@ class CeInfoView(ttk.Frame):
                     y1, y2 = y2, y1
                 self.lvbtn.internal_var.set([x1, y1, x2, y2])
             elif self.attribute == 'location_x':
-                location = [*self.outer.fMapViewTab.pointSelect[0], -1]
+                location = [x1, y1, -1]
                 self.lvbtn.internal_var.set(location)
 
         def __viewAttributeArea(self):
@@ -538,14 +538,17 @@ class CeInfoView(ttk.Frame):
                     if (x1, y1) == (-1, -1):
                         self.outer.fMapViewTab.drawClear()
                     else:
-                        self.outer.fMapViewTab.drawPoint((x1, y1), see=True)
-                        self.outer.fMapViewTab.drawArea((x2, y2), see=True)
+                        self.outer.fMapViewTab.drawSetPoint1((x1, y1), draw=False)
+                        self.outer.fMapViewTab.drawSetPoint2((x2, y2), see=True)
                 elif self.attribute == 'location_x':
-                    x1, y1 = coords[:2]
-                    if (x1, y1) == (-1, -1):
-                        self.outer.fMapViewTab.drawClear()
+                    x1, y1, unit = coords
+                    if unit != -1:
+                        self.outer.nTabsLeft.select(self.outer.fUEditor)
+                        self.outer.fUEditor.unitIdFilter([unit,])
+                    elif (x1, y1) != (-1, -1):
+                        self.outer.fMapViewTab.drawSetPoint1((x1, y1), see=True)
                     else:
-                        self.outer.fMapViewTab.drawPoint((x1, y1), see=True)
+                        self.outer.fMapViewTab.drawClear()
 
         def __modifyAttributeArea(self, ceType: type) -> None:
             curItem = self.outer.fTEditor.tvTriggerList.focus()

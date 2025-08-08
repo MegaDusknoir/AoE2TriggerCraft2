@@ -104,6 +104,9 @@
         "loss": "Loss",
         "history": "History"
     },
+    "labelPoint1": "Tile A",
+    "labelPoint2": "Tile B",
+    "labelRealArea": "Actual Area",
     "btnTriggerEnable": "Enable",
     "btnTriggerLoop": "Loop",
     "labelTriggerDescriptionOrder": "Description Order",

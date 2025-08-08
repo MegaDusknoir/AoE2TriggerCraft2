@@ -389,6 +389,14 @@ class TCWindow():
         defaultFont = tkfont.nametofont('TkDefaultFont')
         self.style.configure('Borderless.Treeview', borderwidth=0,
                              background=self.style.colors.bg, font=(defaultFont.cget('family'), 9), rowheight=self.dpi(20))
+        self.style.configure('sideBarExpand.secondary.TButton', borderwidth=0, font=(defaultFont.cget('family'), 8),
+                             foreground=self.style.colors.secondary,
+                             background=self.style.colors.bg,
+                             focuscolor=self.style.colors.bg,
+                             padding=(0,0,0,0))
+        self.style.map('sideBarExpand.secondary.TButton',
+                       foreground=[('disabled', self.style.colors.secondary), ('active', self.style.colors.bg)],
+                       focuscolor=[('disabled', self.style.colors.bg), ('active', self.style.colors.secondary)])
         self.style.configure('iconButton.Link.TButton', shiftrelief=1, padding=(2,2,1,1))
         self.style.configure('selectionButton.Link.TButton', shiftrelief=1, padding=(2,2,1,1), width=5, background=self.style.colors.active)
         self.style.configure('ceWidgetButton.Outline.TButton',)

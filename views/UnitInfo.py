@@ -134,6 +134,21 @@ class UnitInfoView(ttk.Frame):
             self.variable = ttk.StringVar()
             super().__init__(master, self.variable, **kwargs)
             self.set_display_event(lambda attr=attribute: self.modifyAttribute(attr))
+            self.bind('<MouseWheel>', lambda e:self.__wheelHandler(e.delta))
+            self.bind('<Shift-MouseWheel>', lambda e:self.__wheelHandler(e.delta, 10.0))
+            self.bind('<Control-MouseWheel>', lambda e:self.__wheelHandler(e.delta, 0.1))
+
+        def __wheelHandler(self, direction, multiplying=1.0):
+            try:
+                floatValue = float(self.display_var.get())
+            except ValueError:
+                pass
+            else:
+                if direction > 0:
+                    dst = floatValue + multiplying
+                else:
+                    dst = floatValue - multiplying
+                self.display_var.set(str(round(dst, 10)))
 
         def modifyAttribute(self, attribute: str):
             try:
@@ -212,11 +227,11 @@ class UnitsSelectButton(ttk.Frame):
         self.lvbtn = ListValueButton(self, variable=self.variable, style='ceWidgetButton.Outline.TButton', width=16,
                                     encodeMethod=encodeMethod)
         self.lvbtn.pack(side=LEFT, fill=BOTH, expand=True)
-        # self.lvbtn.set_command(self.__viewAttributeArea)
+        self.lvbtn.set_command(self.__viewUnits)
         self.lvbtn.set_internal_event(self.__modifyValue)
         self._internalSetEvent: Callable[[int], None] | Callable[[list[int]], None] = None
         self.btnSetUnit = ttk.Button(self, style='iconButton.Link.TButton', image=self.outer.imgCeSetLocationUnit,
-                                    command=self.__setMultipleUnits if multiple else self.__setSingleUnits)
+                                    command=self.__setMultipleUnits if self._multiple else self.__setSingleUnits)
         self.btnSetUnit.pack(side=LEFT, padx=0)
         Tooltip(self.btnSetUnit, TEXT['tooltipSetLocationUnit'])
 
@@ -250,6 +265,14 @@ class UnitsSelectButton(ttk.Frame):
 
     def set_internal_event(self, event: Callable[[int], None] | Callable[[list[int]], None]) -> None:
         self._internalSetEvent = event
+
+    def __viewUnits(self):
+        units = self.variable.get()
+        if self._multiple == False and units[0] == -1:
+            units = []
+        if units != []:
+            self.outer.nTabsLeft.select(self.outer.fUEditor)
+            self.outer.fUEditor.unitIdFilter(units)
 
 class UnitConstTreeView(ttk.Treeview):
     """

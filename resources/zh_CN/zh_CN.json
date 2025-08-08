@@ -104,6 +104,9 @@
         "loss": "失败",
         "history": "历史"
     },
+    "labelPoint1": "区格 A",
+    "labelPoint2": "区格 B",
+    "labelRealArea": "实际区域",
     "btnTriggerEnable": "启用",
     "btnTriggerLoop": "循环",
     "labelTriggerDescriptionOrder": "描述顺序",
