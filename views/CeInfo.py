@@ -37,7 +37,33 @@ class CeInfoView(ttk.Frame):
 
             def createConditionEffectInfo():
 
-                def __createAttributeWidgets(formDict, attribute, ceType) -> None:
+                def __createAttributeWidgets(formDict, attribute, ceType:Condition|Effect) -> None:
+                    def object_attributes_widget(var: ttk.IntVar):
+                        curItem = self.app.fTEditor.tvTriggerList.focus()
+                        effect = self.app.fTEditor.getEffect(curItem)
+                        if effect is not None and effect.effect_type in [51]:
+                            value = var.get()
+                            if value in [8,9]:
+                                self.effectWidgetPacks[Effect]['armour_attack_quantity'].gridAttribute(
+                                    EFFECT_WIDGET_FORM['armour_attack_quantity'][1],
+                                    EFFECT_WIDGET_FORM['armour_attack_quantity'][2]
+                                )
+                                self.effectWidgetPacks[Effect]['armour_attack_class'].gridAttribute(
+                                    EFFECT_WIDGET_FORM['armour_attack_class'][1],
+                                    EFFECT_WIDGET_FORM['armour_attack_class'][2]
+                                )
+                                self.effectWidgetPacks[Effect]['quantity'].label.grid_forget()
+                                self.effectWidgetPacks[Effect]['quantity'].grid_forget()
+                            else:
+                                self.effectWidgetPacks[Effect]['armour_attack_quantity'].label.grid_forget()
+                                self.effectWidgetPacks[Effect]['armour_attack_quantity'].grid_forget()
+                                self.effectWidgetPacks[Effect]['armour_attack_class'].label.grid_forget()
+                                self.effectWidgetPacks[Effect]['armour_attack_class'].grid_forget()
+                                self.effectWidgetPacks[Effect]['quantity'].gridAttribute(
+                                    EFFECT_WIDGET_FORM['quantity'][1],
+                                    EFFECT_WIDGET_FORM['quantity'][2]
+                                )
+
                     if attribute not in self.effectWidgetPacks[ceType]:
                         # Create widget in first use, not app start
                         match formDict[attribute][0]:
@@ -47,6 +73,10 @@ class CeInfoView(ttk.Frame):
                                 self.effectWidgetPacks[ceType][attribute] = self.AttributeCombobox(self.app, self,
                                                                                         self.__constructEffectComboboxDicts(attribute),
                                                                                         attribute, ceType)
+                                if ceType == Effect and attribute == 'object_attributes':
+                                    self.effectWidgetPacks[ceType][attribute].variable.trace_add(
+                                        'write',
+                                        lambda *args, var=self.effectWidgetPacks[ceType][attribute].variable:object_attributes_widget(var))
                             case 'Checkbutton':
                                 self.effectWidgetPacks[ceType][attribute] = self.AttributeCheckbutton(self.app, self, attribute, ceType)
                             case 'TextOrEntry':
@@ -251,17 +281,19 @@ class CeInfoView(ttk.Frame):
             if ceType == Effect:
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
-                    # Todo: this two attributes
-                    if attribute in ['armour_attack_class', 'armour_attack_quantity']:
-                        if isinstance(variable.get(), str):
-                            setattr(effect, attribute, None)
-                        elif effect.effect_type == EffectId.MODIFY_ATTRIBUTE \
-                            and effect.object_attributes not in [8, 9]:
-                            setattr(effect, attribute, None)
+                    setattr(effect, attribute, variable.get())
+                    # For MODIFY_ATTRIBUTE
+                    if attribute in ['object_attributes'] and effect.effect_type in [51]:
+                        if variable.get() in [8,9]:
+                            if None in [effect.armour_attack_class, effect.armour_attack_quantity]:
+                                effect.armour_attack_class = -1
+                                effect.armour_attack_quantity = -1
                         else:
-                            setattr(effect, attribute, variable.get())
-                    else:
-                        setattr(effect, attribute, variable.get())
+                            effect.armour_attack_class = None
+                            effect.armour_attack_quantity = None
+                        self.outer.fCeInfo.effectWidgetPacks[Effect]['armour_attack_class'].load(effect.armour_attack_class)
+                        self.outer.fCeInfo.effectWidgetPacks[Effect]['armour_attack_quantity'].load(effect.armour_attack_quantity)
+
                     self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
             elif ceType == Condition:
                 condition = self.outer.fTEditor.getCondition(curItem)

@@ -268,7 +268,7 @@ class UnitsSelectButton(ttk.Frame):
 
     def __viewUnits(self):
         units = self.variable.get()
-        if self._multiple == False and units[0] == -1:
+        if self._multiple == False and units != [] and units[0] == -1:
             units = []
         if units != []:
             self.outer.nTabsLeft.select(self.outer.fUEditor)
@@ -285,6 +285,7 @@ class UnitConstTreeView(ttk.Treeview):
 
     def __init__(self, master=None, show=ttk.TREE, selectmode=BROWSE, columns=(0, 1), **kwargs):
         super().__init__(master, show=show, selectmode=selectmode, columns=columns, **kwargs)
+        self.unitConstMax = max(UnitConstTreeView.unitConstMax, len(UNIT_NAME))
 
     def insert(self, parent, index, ulId:int, **kwargs):
         return super().insert(parent, index, text=f'{ulId}',
@@ -296,7 +297,7 @@ class UnitConstTreeView(ttk.Treeview):
 
     def listUnit(self, filter: Callable[[int], bool] = None):
         self.clear()
-        for id in range(-1, UnitConstTreeView.unitConstMax):
+        for id in range(-1, self.unitConstMax):
             if filter is not None and filter(id):
                 self.insert("", END, id,)
         if len(self.get_children("")) == 1:

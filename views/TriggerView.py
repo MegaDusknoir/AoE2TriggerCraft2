@@ -443,7 +443,8 @@ class TriggerView(ttk.Frame):
                         self.tl.setNodeId(child, (id, displayId))
             # Call AoE2SP
             self.tm.get_trigger(triggerId).remove_condition(idToDelete)
-            # print(self.tm.get_trigger(triggerId).condition_order)
+            # Need call this property to update order (ASP 0.4.7)
+            self.tm.get_trigger(triggerId).condition_order
         else:
             for child in self.tl.get_children(parent):
                 if self.tl.itemType(child) == 'effect':
@@ -458,7 +459,8 @@ class TriggerView(ttk.Frame):
                         self.tl.setNodeId(child, (id, displayId))
             # Call AoE2SP
             self.tm.get_trigger(triggerId).remove_effect(idToDelete)
-            # print(self.tm.get_trigger(triggerId).effect_order)
+            # Need call this property to update order (ASP 0.4.7)
+            self.tm.get_trigger(triggerId).effect_order
 
         self.tl.delete(curItem)
         if nextSelection != '':

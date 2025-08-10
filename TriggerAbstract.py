@@ -40,11 +40,14 @@ def getMessageAbstract(message: str) -> str:
     else:
         return repr(message)[1:-1]
 
+def getArmorClassAbstract(armorClass: int) -> str:
+    return TEXT['datasetDamageClass'].get(armorClass, f'<A{armorClass}>')
+
 def getAttributesAbstract(attribute: int, attackClass: int) -> str:
-    if attribute == 8:
-        return TEXT['fmtStringAttackTypeCombine'].format(TEXT['datasetDamageClass'][attackClass])
-    elif attribute == 9:
-        return TEXT['fmtStringArmorTypeCombine'].format(TEXT['datasetDamageClass'][attackClass])
+    if attribute == 9:
+        return TEXT['fmtStringAttackTypeCombine'].format(getArmorClassAbstract(attackClass))
+    elif attribute == 8:
+        return TEXT['fmtStringArmorTypeCombine'].format(getArmorClassAbstract(attackClass))
     else:
         return TEXT['datasetObjectAttribute'][attribute]
 
@@ -454,7 +457,7 @@ def abstractEffect(effect: Effect) -> str:
                                                                 effect.location_object_reference))
                 case EffectId.CHANGE_OWNERSHIP:
                     if effect.flash_object == 1:
-                        return TEXT['effectDescriptionFormatShift']['1'].format(\
+                        return TEXT['effectDescriptionFormatShift'][1].format(\
                             getNonSpecificUnitAbstract(effect.object_list_unit_id, effect.object_group,
                                                                             effect.object_type, effect.source_player,
                                                                             effect.selected_object_ids,
@@ -531,8 +534,7 @@ def abstractEffect(effect: Effect) -> str:
                                                                         allowAreaEmpty=True),
                                             effect.armour_attack_quantity,
                                             TEXT['datasetOperation'][effect.operation],
-                                            TEXT['datasetDamageClass'].get(effect.armour_attack_class,
-                                                                            f'<A{effect.armour_attack_class}>'))
+                                            getArmorClassAbstract(effect.armour_attack_class))
                 case EffectId.STOP_OBJECT:
                     return formatString.format(getNonSpecificUnitAbstract(effect.object_list_unit_id, effect.object_group,
                                                                         effect.object_type, effect.source_player,
@@ -559,8 +561,7 @@ def abstractEffect(effect: Effect) -> str:
                                                                         allowAreaEmpty=True),
                                             effect.armour_attack_quantity,
                                             TEXT['datasetOperation'][effect.operation],
-                                            TEXT['datasetDamageClass'].get(effect.armour_attack_class,
-                                                                            f'<A{effect.armour_attack_class}>'))
+                                            getArmorClassAbstract(effect.armour_attack_class))
                 case EffectId.CHANGE_OBJECT_RANGE:
                     return formatString.format(getNonSpecificUnitAbstract(effect.object_list_unit_id, effect.object_group,
                                                                         effect.object_type, effect.source_player,
@@ -681,14 +682,23 @@ def abstractEffect(effect: Effect) -> str:
                 case EffectId.ACKNOWLEDGE_AI_SIGNAL:
                     return formatString.format(effect.ai_signal_value)
                 case EffectId.MODIFY_ATTRIBUTE:
-                    effect.armour_attack_quantity, effect.item_id
-                    return formatString.format(getPlayerAbstract(effect.source_player),
-                                            getUnitListName(effect.object_list_unit_id),
-                                            getAttributesAbstract(effect.object_attributes,
-                                                                    effect.armour_attack_class),
-                                            effect.quantity,
-                                            TEXT['datasetOperation'][effect.operation],
-                                            getMessageAbstract(effect.message))
+                    unitConst = effect.object_list_unit_id if effect.object_list_unit_id != -1 else effect.item_id
+                    value = effect.quantity if effect.object_attributes not in [8,9] else effect.armour_attack_quantity
+                    if effect.object_attributes == 50 and effect.quantity == 0:
+                        formatString = TEXT['effectDescriptionFormatShift'][2]
+                        return formatString.format(getPlayerAbstract(effect.source_player),
+                                                getUnitListName(unitConst),
+                                                getAttributesAbstract(effect.object_attributes,
+                                                                        effect.armour_attack_class),
+                                                getMessageAbstract(effect.message),
+                                                TEXT['datasetOperation'][effect.operation])
+                    else:
+                        return formatString.format(getPlayerAbstract(effect.source_player),
+                                                getUnitListName(unitConst),
+                                                getAttributesAbstract(effect.object_attributes,
+                                                                        effect.armour_attack_class),
+                                                value,
+                                                TEXT['datasetOperation'][effect.operation])
                 case EffectId.MODIFY_RESOURCE:
                     return formatString.format(getPlayerAbstract(effect.source_player),
                                             getResourceAbstract(effect.tribute_list),
@@ -845,8 +855,7 @@ def abstractEffect(effect: Effect) -> str:
                                                                         allowAreaEmpty=True),
                                             effect.armour_attack_quantity,
                                             TEXT['datasetOperation'][effect.operation],
-                                            TEXT['datasetDamageClass'].get(effect.armour_attack_class,
-                                                                            f'<A{effect.armour_attack_class}>'))
+                                            getArmorClassAbstract(effect.armour_attack_class))
                 case EffectId.CREATE_OBJECT_ARMOR:
                     return formatString.format(getNonSpecificUnitAbstract(effect.object_list_unit_id, effect.object_group,
                                                                         effect.object_type, effect.source_player,
@@ -856,16 +865,15 @@ def abstractEffect(effect: Effect) -> str:
                                                                         allowAreaEmpty=True),
                                             effect.armour_attack_quantity,
                                             TEXT['datasetOperation'][effect.operation],
-                                            TEXT['datasetDamageClass'].get(effect.armour_attack_class,
-                                                                            f'<A{effect.armour_attack_class}>'))
+                                            getArmorClassAbstract(effect.armour_attack_class))
                 case EffectId.MODIFY_ATTRIBUTE_BY_VARIABLE:
+                    effect.message
                     return formatString.format(getPlayerAbstract(effect.source_player),
                                             getUnitListName(effect.object_list_unit_id),
                                             getAttributesAbstract(effect.object_attributes,
                                                                     effect.armour_attack_class),
                                             effect.variable,
-                                            TEXT['datasetOperation'][effect.operation],
-                                            getMessageAbstract(effect.message))
+                                            TEXT['datasetOperation'][effect.operation])
                 case EffectId.SET_OBJECT_COST:
                     # Todo
                     return formatString

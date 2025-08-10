@@ -509,6 +509,8 @@
     "fmtStringViewScroll": "Scroll",
     "fmtStringViewSwitch": "Switch",
     "fmtStringFaceTo": " face to {0}",
+    "fmtStringAttackTypeCombine": "{0} attack",
+    "fmtStringArmorTypeCombine": "{0} armor",
     "fmtEnable": "Enable",
     "fmtDisable": "Disable",
     "fmtChangeViewTime": " in {0}s",
@@ -518,7 +520,8 @@
     "fmtTimerReset": "Reset",
     "effectDescriptionFormatShift": {
         "0": "None",
-        "1": "Let {0} flash to {1}"
+        "1": "Let {0} flash to {1}",
+        "2": "Make {2} of {0}'s {1} {4} \"{3}\""
     },
     "effectDescriptionFormat": {
         "0": "None",
@@ -572,7 +575,7 @@
         "48": "Change {0}'s civ name to {1}",
         "49": "Create garrisoned {2} of {1} at {0}",
         "50": "Acknowledge AI Signal {0}",
-        "51": "Make {2} of {0}'s {1} {4} {3}/\"{5}\"",
+        "51": "Make {2} of {0}'s {1} {4} {3}",
         "52": "Make {0}'s {1} {3} {2}",
         "53": "Make {0}'s {1} {3} variable {2}",
         "54": "Set {0}'s gather point to {1}",
@@ -600,7 +603,7 @@
         "76": "Let {0}'s {1} start researching {2}",
         "77": "Create {0}'s {3} attack {2} {1}",
         "78": "Create {0}'s {3} armor {2} {1}",
-        "79": "Make {2} of {0}'s {1} {4} Variable {3} / \"{5}\"",
+        "79": "Make {2} of {0}'s {1} {4} Variable {3}",
         "80": "?Set cost of {0}'s '{1} to {2}, {3}",
         "81": "Load Key Value",
         "82": "Store Key Value",
