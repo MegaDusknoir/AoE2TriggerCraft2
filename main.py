@@ -63,6 +63,7 @@ else:
 
 ASPSettings.ENABLE_XS_CHECK_INTEGRATION = False
 ASPSettings.ALLOW_OVERWRITING_SOURCE = True
+ASPSettings.ALLOW_DIRTY_RETRIEVER_OVERWRITE = True
 
 class CreateIcon():
     def __init__(self):
