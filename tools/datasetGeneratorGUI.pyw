@@ -2,6 +2,7 @@
 import ctypes
 import json
 import os
+from parse import parse
 from tkinter import messagebox
 from tkinter.filedialog import askdirectory
 from tkinter.constants import *
@@ -113,24 +114,32 @@ class DatasetGeneratorWindow():
     def __executeGenerate(self):
         rootPath = self.varPath.get()
         dataPath = f'{rootPath}/resources/_common/dat/empires2_x2_p1.dat'
-        dataObj = gen.parseDataFile(dataPath)
-        for key, check in self.checks.items():
-            if check[1].get():
-                langPath = f'{rootPath}/resources/{check[0]}/strings/key-value/key-value-strings-utf8.txt'
-                destPath = f'{self.dstPath}/{key}'
-                langDict = gen.parseLanguageText(langPath)
-                unitName = gen.getUnitConstInfo(dataObj, langDict)
-                techName = gen.getTechName(dataObj, langDict)
-                tributeName = gen.getTributeName(dataObj, langDict)
-                if os.path.isdir(destPath) == False:
-                    os.makedirs(destPath)
-                with open(f'{destPath}/UnitsName.json', 'w', encoding='utf-8') as f:
-                    json.dump(unitName, f, indent=4, ensure_ascii=False)
-                with open(f'{destPath}/TechsName.json', 'w', encoding='utf-8') as f:
-                    json.dump(techName, f, indent=4, ensure_ascii=False)
-                with open(f'{destPath}/TributesName.json', 'w', encoding='utf-8') as f:
-                    json.dump(tributeName, f, indent=4, ensure_ascii=False)
-        messagebox.showinfo(title='Note', message='Generate done.')
+        try:
+            dataObj = gen.parseDataFile(dataPath)
+        except ValueError as e:
+            parsed = parse("{0} is not a valid {1}", e.args[0])
+            if parsed and parsed.fixed[1] == 'Version':
+                messagebox.showerror(title='Error', message=f'{parsed.fixed[0].strip("'")} is unsupported.')
+            else:
+                raise e
+        else:
+            for key, check in self.checks.items():
+                if check[1].get():
+                    langPath = f'{rootPath}/resources/{check[0]}/strings/key-value/key-value-strings-utf8.txt'
+                    destPath = f'{self.dstPath}/{key}'
+                    langDict = gen.parseLanguageText(langPath)
+                    unitName = gen.getUnitConstInfo(dataObj, langDict)
+                    techName = gen.getTechName(dataObj, langDict)
+                    tributeName = gen.getTributeName(dataObj, langDict)
+                    if os.path.isdir(destPath) == False:
+                        os.makedirs(destPath)
+                    with open(f'{destPath}/UnitsName.json', 'w', encoding='utf-8') as f:
+                        json.dump(unitName, f, indent=4, ensure_ascii=False)
+                    with open(f'{destPath}/TechsName.json', 'w', encoding='utf-8') as f:
+                        json.dump(techName, f, indent=4, ensure_ascii=False)
+                    with open(f'{destPath}/TributesName.json', 'w', encoding='utf-8') as f:
+                        json.dump(tributeName, f, indent=4, ensure_ascii=False)
+            messagebox.showinfo(title='Note', message='Generate done.')
 
 if __name__ == '__main__':
     window = DatasetGeneratorWindow()

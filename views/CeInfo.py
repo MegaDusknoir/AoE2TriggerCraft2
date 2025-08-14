@@ -10,6 +10,7 @@ from ttkbootstrap.scrolled import ScrolledText
 
 from AoE2ScenarioParser.objects.data_objects.condition import Condition
 from AoE2ScenarioParser.objects.data_objects.effect import Effect
+from AoE2ScenarioParser.objects.data_objects.effect import _is_float_quantity_effect as isFloatQuantityEffect
 from Localization import TEXT
 from TriggerAbstract import *
 from Util import IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, Tooltip, ValueSelectButton, ZoomImageViewer
@@ -29,6 +30,11 @@ class CeInfoView(ttk.Frame):
     def tm(self):
         return self.app.triggerManager
 
+    EFFECTS_OBJATTR_WITH_AA_QUANTITY = [51, 104, 105]
+    EFFECTS_OBJATTR_ONLY_AA_CLASS = [79, 87, 106]
+    EFFECTS_OBJATTR_WITH_AA_CLASS = EFFECTS_OBJATTR_WITH_AA_QUANTITY + EFFECTS_OBJATTR_ONLY_AA_CLASS
+    ATTRIBUTES_WITH_AA = [8, 9]
+
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
         self.app = app
@@ -41,9 +47,9 @@ class CeInfoView(ttk.Frame):
                     def object_attributes_widget(var: ttk.IntVar):
                         curItem = self.app.fTEditor.tvTriggerList.focus()
                         effect = self.app.fTEditor.getEffect(curItem)
-                        if effect is not None and effect.effect_type in [51]:
+                        if effect is not None and effect.effect_type in self.EFFECTS_OBJATTR_WITH_AA_QUANTITY:
                             value = var.get()
-                            if value in [8,9]:
+                            if value in self.ATTRIBUTES_WITH_AA:
                                 self.effectWidgetPacks[Effect]['armour_attack_quantity'].gridAttribute(
                                     EFFECT_WIDGET_FORM['armour_attack_quantity'][1],
                                     EFFECT_WIDGET_FORM['armour_attack_quantity'][2]
@@ -63,12 +69,22 @@ class CeInfoView(ttk.Frame):
                                     EFFECT_WIDGET_FORM['quantity'][1],
                                     EFFECT_WIDGET_FORM['quantity'][2]
                                 )
+                        elif effect is not None and effect.effect_type in self.EFFECTS_OBJATTR_WITH_AA_CLASS:
+                            value = var.get()
+                            if value in self.ATTRIBUTES_WITH_AA:
+                                self.effectWidgetPacks[Effect]['armour_attack_class'].gridAttribute(
+                                    EFFECT_WIDGET_FORM['armour_attack_class'][1],
+                                    EFFECT_WIDGET_FORM['armour_attack_class'][2]
+                                )
+                            else:
+                                self.effectWidgetPacks[Effect]['armour_attack_class'].label.grid_forget()
+                                self.effectWidgetPacks[Effect]['armour_attack_class'].grid_forget()
 
                     if attribute not in self.effectWidgetPacks[ceType]:
                         # Create widget in first use, not app start
                         match formDict[attribute][0]:
                             case 'Entry':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeEntry(self.app, self, attribute, ceType)
+                                self.effectWidgetPacks[ceType][attribute] = self.AttributeEntry(self.app, self, attribute, ceType, formDict[attribute][3])
                             case 'Combobox':
                                 self.effectWidgetPacks[ceType][attribute] = self.AttributeCombobox(self.app, self,
                                                                                         self.__constructEffectComboboxDicts(attribute),
@@ -82,7 +98,7 @@ class CeInfoView(ttk.Frame):
                             case 'TextOrEntry':
                                 self.effectWidgetPacks[ceType][attribute] = self.AttributeText(self.app, self, attribute, ceType)
                                 self.effectWidgetPacks[ceType]['__variant_' + attribute] = self.AttributeEntry(self.app, self,
-                                                                                                    '__variant_' + attribute, ceType)
+                                                                                                    '__variant_' + attribute, ceType, formDict[attribute][3])
                             case 'MultiUnitSelector':
                                 self.effectWidgetPacks[ceType][attribute] = self.AttributeUnitsButton(self.app, self, attribute, ceType, multi=True)
                             case 'SingleUnitSelector':
@@ -134,7 +150,7 @@ class CeInfoView(ttk.Frame):
                                 case 'Checkbutton':
                                     widgetRef.gridAttribute(column, row)
                                 case 'TextOrEntry':
-                                    if effectTypeId in [26, 48, 51, 56, 59, 60, 65, 79, 81, 82, 83, 87, 88]:
+                                    if effectTypeId in [26, 48, 51, 56, 59, 60, 65, 79, 81, 82, 83, 87, 88, 104, 105, 106]:
                                         if effectTypeId in [26, 59, 60, 65, 88]:
                                             self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(1, 2, columnspan=2)
                                         else:
@@ -283,8 +299,8 @@ class CeInfoView(ttk.Frame):
                 if effect is not None:
                     setattr(effect, attribute, variable.get())
                     # For MODIFY_ATTRIBUTE
-                    if attribute in ['object_attributes'] and effect.effect_type in [51]:
-                        if variable.get() in [8,9]:
+                    if attribute in ['object_attributes'] and effect.effect_type in self.outer.fCeInfo.EFFECTS_OBJATTR_WITH_AA_CLASS:
+                        if variable.get() in self.outer.fCeInfo.ATTRIBUTES_WITH_AA:
                             if None in [effect.armour_attack_class, effect.armour_attack_quantity]:
                                 effect.armour_attack_class = -1
                                 effect.armour_attack_quantity = -1
@@ -303,11 +319,12 @@ class CeInfoView(ttk.Frame):
 
     class AttributeEntry(PairValueEntry, AttributeWidget):
         def __init__(self, outer: 'TCWindow', master, attribute: str,
-                     ceType: type, **kwargs):
+                     ceType: type, supportType: type, **kwargs):
             if ceType == Effect:
                 title = TEXT['effectAttributeName'][attribute]
             else:
                 title = TEXT['conditionAttributeName'][attribute]
+            self.supportType = supportType
             self.outer = outer
             self.variable = ttk.StringVar()
             self.label = ttk.Label(master, text=title)
@@ -328,27 +345,38 @@ class CeInfoView(ttk.Frame):
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
                     value = variable.get()
-                    if isinstance(getattr(effect, attribute), int):
-                        try:
-                            value = int(value)
-                        except ValueError:
-                            value = -1
-                        setattr(effect, attribute, value)
-                    else:
+                    if self.supportType == int:
+                        if isFloatQuantityEffect(effect.effect_type, effect.object_attributes):
+                            try:
+                                value = float(value)
+                            except ValueError:
+                                value = -1
+                            setattr(effect, attribute, value)
+                        else:
+                            try:
+                                value = int(value)
+                            except ValueError:
+                                value = -1
+                            setattr(effect, attribute, value)
+                    elif self.supportType == str:
                         setattr(effect, attribute, value.replace('\n', '\r'))
+                    else:
+                        raise NotImplementedError(f'{self.supportType} is not expected.')
                     self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
             elif ceType == Condition:
                 condition = self.outer.fTEditor.getCondition(curItem)
                 if condition is not None:
                     value = variable.get()
-                    if isinstance(getattr(condition, attribute), int):
+                    if self.supportType == int:
                         try:
                             value = int(value)
                         except ValueError:
                             value = -1
                         setattr(condition, attribute, value)
-                    else:
+                    elif self.supportType == str:
                         setattr(condition, attribute, value.replace('\n', '\r'))
+                    else:
+                        raise NotImplementedError(f'{self.supportType} is not expected.')
                     self.outer.fCeInfo.updateConditionTreeNode(curItem, condition)
 
     class AttributeCheckbutton(ttk.Checkbutton, AttributeWidget):
@@ -408,21 +436,17 @@ class CeInfoView(ttk.Frame):
             curItem = self.outer.fTEditor.tvTriggerList.focus()
             match self.outer.fTEditor.tvTriggerList.itemType(curItem):
                 case 'condition':
-                    triggerNode = self.outer.fTEditor.tvTriggerList.getTriggerNode(curItem)
-                    triggerId = self.outer.fTEditor.tvTriggerList.getNodeId(triggerNode)[0]
-                    conditionId = self.outer.fTEditor.tvTriggerList.getNodeId(curItem)[0]
-                    description = self.text.get(1.0, 'end-1c')
-                    condition = self.outer.triggerManager.get_trigger(triggerId).get_condition(conditionId)
-                    setattr(condition, attribute, description.replace('\n', '\r'))
-                    self.outer.fCeInfo.updateConditionTreeNode(curItem, condition)
+                    condition = self.outer.fTEditor.getCondition(curItem)
+                    if condition is not None:
+                        description = self.text.get(1.0, 'end-1c')
+                        setattr(condition, attribute, description.replace('\n', '\r'))
+                        self.outer.fCeInfo.updateConditionTreeNode(curItem, condition)
                 case 'effect':
-                    triggerNode = self.outer.fTEditor.tvTriggerList.getTriggerNode(curItem)
-                    triggerId = self.outer.fTEditor.tvTriggerList.getNodeId(triggerNode)[0]
-                    effectId = self.outer.fTEditor.tvTriggerList.getNodeId(curItem)[0]
-                    description = self.text.get(1.0, 'end-1c')
-                    effect = self.outer.triggerManager.get_trigger(triggerId).get_effect(effectId)
-                    setattr(effect, attribute, description.replace('\n', '\r'))
-                    self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
+                    effect = self.outer.fTEditor.getEffect(curItem)
+                    if effect is not None:
+                        description = self.text.get(1.0, 'end-1c')
+                        setattr(effect, attribute, description.replace('\n', '\r'))
+                        self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
                 case 'trigger':
                     pass
                 case _:
@@ -622,11 +646,13 @@ class CeInfoView(ttk.Frame):
                 return {} # update later
             case 'technology':
                 return TECH_NAME
+            case 'local_technology':
+                return {} # Todo: Fill what?
             case 'trigger_id':
                 return {} # update later
-            case 'object_group':
+            case 'object_group' | 'object_group2':
                 return TEXT['datasetObjectClass']
-            case 'object_type':
+            case 'object_type' | 'object_type2':
                 return TEXT['datasetObjectType']
             case 'instruction_panel_position':
                 return {v: TEXT['comboValueEffectInstructionPanelPosition'].format(v) for v in range(3)}
@@ -644,7 +670,7 @@ class CeInfoView(ttk.Frame):
                 return {} # update later
             case 'timer':
                 return {} # update later
-            case 'facet':
+            case 'facet' | 'facet2':
                 return TEXT['dataUnitFaceToName']
             case 'player_color':
                 return TEXT['datasetPlayerColorId']

@@ -31,9 +31,9 @@ def createCeAttributeDict(outPath):
 
     package_path = getPackagePath("AoE2ScenarioParser")
 
-    with open(f'{package_path}/versions/DE/v1.54/effects.json', 'r', encoding='utf-8') as f:
+    with open(f'{package_path}/versions/DE/v1.55/effects.json', 'r', encoding='utf-8') as f:
         effectStruct = json.load(f)
-    with open(f'{package_path}/versions/DE/v1.54/conditions.json', 'r', encoding='utf-8') as f:
+    with open(f'{package_path}/versions/DE/v1.55/conditions.json', 'r', encoding='utf-8') as f:
         conditionStruct = json.load(f)
 
     effectAttributes = {}
@@ -42,6 +42,9 @@ def createCeAttributeDict(outPath):
             attributes = effectStruct[effect]['attributes']
             if 'effect_type' in attributes:
                 attributes.remove('effect_type')
+            if 'quantity_float' in attributes:
+                # quantity_float is a hidden attr in ASP
+                attributes.remove('quantity_float')
             effectAttributes[int(effect)] = attributes
 
     conditionAttributes = {}

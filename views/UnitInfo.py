@@ -98,10 +98,14 @@ class UnitInfoView(ttk.Frame):
 
         #region Column 3
         """caption_string_id"""
-        lUCaption = ttk.Label(self, text=TEXT['labelUnitCaptionStringID'])
-        lUCaption.grid(column=3, row=0, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
-        self.eUCaption = self.__IntAttributeEntry(self.app, self, 'caption_string_id')
-        self.eUCaption.grid(column=3, row=1, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+        lUCaptionID = ttk.Label(self, text=TEXT['labelUnitCaptionStringID'])
+        lUCaptionID.grid(column=3, row=0, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+        self.eUCaptionID = self.__IntAttributeEntry(self.app, self, 'caption_string_id')
+        self.eUCaptionID.grid(column=3, row=1, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+        lUCaption = ttk.Label(self, text=TEXT['labelUnitCaption'])
+        lUCaption.grid(column=3, row=2, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+        self.eUCaption = self.__StringAttributeEntry(self.app, self, 'caption_string')
+        self.eUCaption.grid(column=3, row=3, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
         #endregion Column 3
 
         self.grid_columnconfigure(0,weight=1)
@@ -109,6 +113,20 @@ class UnitInfoView(ttk.Frame):
         self.grid_columnconfigure(2,weight=1)
         self.grid_columnconfigure(3,weight=1)
         self.grid_columnconfigure(4,minsize=self.app.dpi(10))
+
+    class __StringAttributeEntry(PairValueEntry):
+        def __init__(self, outer: 'TCWindow', master, attribute: str, **kwargs):
+            self.outer = outer
+            self.variable = ttk.StringVar()
+            super().__init__(master, self.variable, **kwargs)
+            self.set_display_event(lambda attr=attribute: self.modifyAttribute(attr))
+
+        def modifyAttribute(self, attribute: str):
+            strValue = self.variable.get()
+            print(f'modifyAttribute {attribute} = {strValue}')
+            if self.outer.fUnitInfo.unitFocus is not None:
+                unit = self.outer.fUnitInfo.unitFocus.getUnit(self.outer.fUnitInfo.um)
+                setattr(unit, attribute, strValue)
 
     class __IntAttributeEntry(PairValueEntry):
         def __init__(self, outer: 'TCWindow', master, attribute: str, **kwargs):
@@ -214,7 +232,8 @@ class UnitInfoView(ttk.Frame):
         self.eUInitFrame.variable.set(unit.initial_animation_frame)
         self.eUStatus.variable.set(unit.status)
         self.eURefId.variable.set(unit.reference_id)
-        self.eUCaption.variable.set(unit.caption_string_id)
+        self.eUCaptionID.variable.set(unit.caption_string_id)
+        self.eUCaption.variable.set(unit.caption_string)
 
 class UnitsSelectButton(ttk.Frame):
     def __init__(self, outer: 'TCWindow', master, multiple: bool,

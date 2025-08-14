@@ -109,6 +109,7 @@
     "labelRealArea": "Actual Area",
     "btnTriggerEnable": "Enable",
     "btnTriggerLoop": "Loop",
+    "btnTriggerExecuteOnLoad": "Execute On Load",
     "labelTriggerDescriptionOrder": "Description Order",
     "labelTriggerDescription": "Description",
     "labelTriggerShortDescription": "Short Description",
@@ -134,6 +135,7 @@
     "labelUnitStatus": "Status",
     "labelUnitReferenceId": "Reference ID",
     "labelUnitCaptionStringID": "Caption String ID",
+    "labelUnitCaption": "Caption String",
     "titleUnitConst": "Unit Const",
     "btnCancel": "Cancel",
     "btnConfirm": "Confirm",
@@ -205,7 +207,10 @@
         "decision_id": "Decision ID",
         "decision_option": "Decision Option",
         "variable2": "Variable",
-        "xs_function": "XS Function"
+        "xs_function": "XS Function",
+        "local_technology": "Local Technology",
+        "object_group2": "Object Group",
+        "object_type2": "Object Type"
     },
     "conditionNameFormatForUnknown": "<Condition: Unknown {0}>",
     "conditionName": {
@@ -248,7 +253,8 @@
         "76": "Object Attacked",
         "77": "Hero Power Cast",
         "78": "Compare Variables",
-        "79": "Trigger Active"
+        "79": "Trigger Active",
+        "80": "Local Tech Researched"
     },
     "fmtStringFullMap": "Entire Map",
     "fmtStringAnyUnit": "Any Unit",
@@ -395,7 +401,18 @@
         "sound_name": "Sound",
         "selected_object_ids": "Unit Selection",
         "message_option1": "Option 1",
-        "message_option2": "Option 2"
+        "message_option2": "Option 2",
+        "max_units_affected": "Max Units Affected",
+        "disable_garrison_unload_sound": "Disable Garrison Unload Sound",
+        "hotkey": "Hotkey",
+        "train_time": "Train Time",
+        "local_technology": "Local Technology",
+        "disable_sound": "Disable Sound",
+        "object_group2": "Object Group",
+        "object_type2": "Object Type",
+        "quantity_float": "Quantity",
+        "facet2": "Face To",
+        "global_sound": "Global Sound"
     },
     "effectNameFormatForUnknown": "<Effect: Unknown {0}>",
     "effectName": {
@@ -500,7 +517,13 @@
         "98": "Disable Unit Attackable",
         "99": "Enable Unit Attackable",
         "100": "Modify Variable By Variable",
-        "101": "Count Units Into Variable"
+        "101": "Count Units Into Variable",
+        "102": "Add Train Location",
+        "103": "Research Local Technology",
+        "104": "Modify Attribute For Class",
+        "105": "Modify Object Attribute",
+        "106": "Modify Object Attribute By Variable",
+        "107": "Change Object Visibility"
     },
     "fmtMessageLengthLimit": 24,
     "fmtStringForceResearch": "force ",

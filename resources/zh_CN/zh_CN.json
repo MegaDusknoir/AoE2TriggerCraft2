@@ -109,6 +109,7 @@
     "labelRealArea": "实际区域",
     "btnTriggerEnable": "启用",
     "btnTriggerLoop": "循环",
+    "btnTriggerExecuteOnLoad": "加载时执行",
     "labelTriggerDescriptionOrder": "描述顺序",
     "labelTriggerDescription": "描述",
     "labelTriggerShortDescription": "简短描述",
@@ -134,6 +135,7 @@
     "labelUnitStatus": "状态",
     "labelUnitReferenceId": "单位 ID",
     "labelUnitCaptionStringID": "标题字符串表 ID",
+    "labelUnitCaption": "标题",
     "titleUnitConst": "单位类型",
     "btnCancel": "取消",
     "btnConfirm": "确认",
@@ -205,7 +207,10 @@
         "decision_id": "决定 ID",
         "decision_option": "决定选项",
         "variable2": "变量",
-        "xs_function": "XS 脚本"
+        "xs_function": "XS 脚本",
+        "local_technology": "本地科技",
+        "object_group2": "物体种属",
+        "object_type2": "物体类型"
     },
     "conditionNameFormatForUnknown": "<条件: 未知 {0}>",
     "conditionName": {
@@ -248,7 +253,8 @@
         "76": "物体已攻击",
         "77": "英雄力量施放",
         "78": "比较变量",
-        "79": "触发已激活"
+        "79": "触发已激活",
+        "80": "研究本地科技"
     },
     "fmtStringFullMap": "全图",
     "fmtStringAnyUnit": "单位",
@@ -402,7 +408,18 @@
         "sound_name": "声音 (事件) 名",
         "selected_object_ids": "设定物体",
         "message_option1": "选项 1",
-        "message_option2": "选项 2"
+        "message_option2": "选项 2",
+        "max_units_affected": "最大生效单位数",
+        "disable_garrison_unload_sound": "禁用驻扎卸载音效",
+        "hotkey": "热键",
+        "train_time": "训练时间",
+        "local_technology": "本地科技",
+        "disable_sound": "禁用音效",
+        "object_group2": "物体种属",
+        "object_type2": "物体类型",
+        "quantity_float": "数量",
+        "facet2": "朝向",
+        "global_sound": "全局音效"
     },
     "effectNameFormatForUnknown": "<效果: 未知 {0}>",
     "effectName": {
@@ -507,7 +524,13 @@
         "98": "禁用单位可攻击",
         "99": "启用单位可攻击",
         "100": "根据变量修改变量",
-        "101": "将单位计入变量"
+        "101": "将单位计入变量",
+        "102": "添加训练位置",
+        "103": "研究本地科技",
+        "104": "修改种属属性",
+        "105": "修改物体属性",
+        "106": "根据变量修改物体属性",
+        "107": "更改物体能见度"
     },
     "fmtMessageLengthLimit": 16,
     "fmtStringForceResearch": "强制",
