@@ -13,7 +13,7 @@ from AoE2ScenarioParser.objects.data_objects.effect import Effect
 from AoE2ScenarioParser.objects.data_objects.effect import _is_float_quantity_effect as isFloatQuantityEffect
 from Localization import TEXT
 from TriggerAbstract import *
-from Util import IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, Tooltip, ValueSelectButton, ZoomImageViewer
+from Util import FilteredMappedCombobox, IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, Tooltip, ValueSelectButton, ZoomImageViewer
 from WidgetLayout import CONDITION_WIDGET_FORM, EFFECT_WIDGET_FORM
 from _prebuild.CeAttributes import CONDITION_ATTRIBUTES, EFFECT_ATTRIBUTES
 from views.UnitInfo import UnitConstSelectButton, UnitsSelectButton
@@ -39,216 +39,192 @@ class CeInfoView(ttk.Frame):
         super().__init__(master, **kwargs)
         self.app = app
 
-        def createTceInfo():
-
-            def createConditionEffectInfo():
-
-                def __createAttributeWidgets(formDict, attribute, ceType:Condition|Effect) -> None:
-                    def object_attributes_widget(var: ttk.IntVar):
-                        curItem = self.app.fTEditor.tvTriggerList.focus()
-                        effect = self.app.fTEditor.getEffect(curItem)
-                        if effect is not None and effect.effect_type in self.EFFECTS_OBJATTR_WITH_AA_QUANTITY:
-                            value = var.get()
-                            if value in self.ATTRIBUTES_WITH_AA:
-                                self.effectWidgetPacks[Effect]['armour_attack_quantity'].gridAttribute(
-                                    EFFECT_WIDGET_FORM['armour_attack_quantity'][1],
-                                    EFFECT_WIDGET_FORM['armour_attack_quantity'][2]
-                                )
-                                self.effectWidgetPacks[Effect]['armour_attack_class'].gridAttribute(
-                                    EFFECT_WIDGET_FORM['armour_attack_class'][1],
-                                    EFFECT_WIDGET_FORM['armour_attack_class'][2]
-                                )
-                                self.effectWidgetPacks[Effect]['quantity'].label.grid_forget()
-                                self.effectWidgetPacks[Effect]['quantity'].grid_forget()
-                            else:
-                                self.effectWidgetPacks[Effect]['armour_attack_quantity'].label.grid_forget()
-                                self.effectWidgetPacks[Effect]['armour_attack_quantity'].grid_forget()
-                                self.effectWidgetPacks[Effect]['armour_attack_class'].label.grid_forget()
-                                self.effectWidgetPacks[Effect]['armour_attack_class'].grid_forget()
-                                self.effectWidgetPacks[Effect]['quantity'].gridAttribute(
-                                    EFFECT_WIDGET_FORM['quantity'][1],
-                                    EFFECT_WIDGET_FORM['quantity'][2]
-                                )
-                        elif effect is not None and effect.effect_type in self.EFFECTS_OBJATTR_WITH_AA_CLASS:
-                            value = var.get()
-                            if value in self.ATTRIBUTES_WITH_AA:
-                                self.effectWidgetPacks[Effect]['armour_attack_class'].gridAttribute(
-                                    EFFECT_WIDGET_FORM['armour_attack_class'][1],
-                                    EFFECT_WIDGET_FORM['armour_attack_class'][2]
-                                )
-                            else:
-                                self.effectWidgetPacks[Effect]['armour_attack_class'].label.grid_forget()
-                                self.effectWidgetPacks[Effect]['armour_attack_class'].grid_forget()
-
-                    if attribute not in self.effectWidgetPacks[ceType]:
-                        # Create widget in first use, not app start
-                        match formDict[attribute][0]:
-                            case 'Entry':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeEntry(self.app, self, attribute, ceType, formDict[attribute][3])
-                            case 'Combobox':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeCombobox(self.app, self,
-                                                                                        self.__constructEffectComboboxDicts(attribute),
-                                                                                        attribute, ceType)
-                                if ceType == Effect and attribute == 'object_attributes':
-                                    self.effectWidgetPacks[ceType][attribute].variable.trace_add(
-                                        'write',
-                                        lambda *args, var=self.effectWidgetPacks[ceType][attribute].variable:object_attributes_widget(var))
-                            case 'Checkbutton':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeCheckbutton(self.app, self, attribute, ceType)
-                            case 'TextOrEntry':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeText(self.app, self, attribute, ceType)
-                                self.effectWidgetPacks[ceType]['__variant_' + attribute] = self.AttributeEntry(self.app, self,
-                                                                                                    '__variant_' + attribute, ceType, formDict[attribute][3])
-                            case 'MultiUnitSelector':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeUnitsButton(self.app, self, attribute, ceType, multi=True)
-                            case 'SingleUnitSelector':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeUnitsButton(self.app, self, attribute, ceType, multi=False)
-                            case 'UnitConstSelector':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeUnitConstButton(self.app, self, attribute, ceType)
-                            case 'AreaSelector':
-                                self.effectWidgetPacks[ceType][attribute] = self.AttributeAreaButton(self.app, self, attribute, ceType)
-                            case _:
-                                pass
-
-                def __showAttributeWidgets(effectTypeId: int, nodeType: Literal['effect', 'condition']) -> None:
-                    for ce in self.effectWidgetPacks:
-                        for widgetPack in self.effectWidgetPacks[ce].values():
-                            widgetPack: CeInfoView.AttributeWidget
-                            widgetPack.label.grid_forget()
-                            widgetPack.grid_forget()
-                    if nodeType == 'effect':
-                        attributesDict = EFFECT_ATTRIBUTES
-                        attrWidgetFormDict = EFFECT_WIDGET_FORM
-                        ceType = Effect
+        def __createAttributeWidgets(formDict, attribute, ceType:Condition|Effect) -> None:
+            def object_attributes_widget(var: ttk.IntVar):
+                curItem = self.app.fTEditor.tvTriggerList.focus()
+                effect = self.app.fTEditor.getEffect(curItem)
+                if effect is not None and effect.effect_type in self.EFFECTS_OBJATTR_WITH_AA_QUANTITY:
+                    value = var.get()
+                    if value in self.ATTRIBUTES_WITH_AA:
+                        self.effectWidgetPacks[Effect]['armour_attack_quantity'].gridAttribute(
+                            EFFECT_WIDGET_FORM['armour_attack_quantity'][1],
+                            EFFECT_WIDGET_FORM['armour_attack_quantity'][2]
+                        )
+                        self.effectWidgetPacks[Effect]['armour_attack_class'].gridAttribute(
+                            EFFECT_WIDGET_FORM['armour_attack_class'][1],
+                            EFFECT_WIDGET_FORM['armour_attack_class'][2]
+                        )
+                        self.effectWidgetPacks[Effect]['quantity'].label.grid_forget()
+                        self.effectWidgetPacks[Effect]['quantity'].grid_forget()
                     else:
-                        attributesDict = CONDITION_ATTRIBUTES
-                        attrWidgetFormDict = CONDITION_WIDGET_FORM
-                        ceType = Condition
-                    for attribute in attributesDict.get(effectTypeId, []):
-                        __createAttributeWidgets(attrWidgetFormDict, attribute, ceType)
-                        if attribute not in self.effectWidgetPacks[ceType]:
-                            continue
-                        widgetRef: CeInfoView.AttributeWidget = self.effectWidgetPacks[ceType][attribute]
-                        column, row = attrWidgetFormDict[attribute][1], attrWidgetFormDict[attribute][2]
-                        if column != -1 and row != -1:
-                            match attrWidgetFormDict[attribute][0]:
-                                case 'Entry':
-                                    widgetRef.gridAttribute(column, row)
-                                    if attribute == 'string_id' and effectTypeId in [26, 59, 60, 65, 88]:
-                                        widgetRef.gridAttribute(1, 1)
-                                case 'Combobox':
-                                    widgetRef: CeInfoView.AttributeCombobox
-                                    if attribute == 'trigger_id':
-                                        # Get trigger name mapping
-                                        widgetRef.update_mapping( \
-                                            {trigger.trigger_id: trigger.name for trigger in self.tm.triggers})
-                                    elif attribute == 'source_player' or attribute == 'target_player':
-                                        # Get player amount
-                                        widgetRef.update_mapping( \
-                                            {i:getPlayerAbstract(i) for i in range(0, self.app.activeScenario.player_manager.active_players + 1)})
-                                    widgetRef.gridAttribute(column, row)
-                                case 'Checkbutton':
-                                    widgetRef.gridAttribute(column, row)
-                                case 'TextOrEntry':
-                                    if effectTypeId in [26, 48, 51, 56, 59, 60, 65, 79, 81, 82, 83, 87, 88, 104, 105, 106]:
-                                        if effectTypeId in [26, 59, 60, 65, 88]:
-                                            self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(1, 2, columnspan=2)
-                                        else:
-                                            self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(column, row)
-                                    else:
-                                        widgetRef.gridAttribute(column, row,
-                                                                columnspan=2, rowspan=3)
-                                case 'MultiUnitSelector' | 'SingleUnitSelector':
-                                    widgetRef.gridAttribute(column, row)
-                                case 'UnitConstSelector':
-                                    widgetRef.gridAttribute(column, row)
-                                case 'AreaSelector':
-                                    if 'location_object_reference' in attributesDict.get(effectTypeId, []) and \
-                                        attribute == 'location_x':
-                                        widgetRef.gridAttributeWithUnitSel(column, row)
-                                    else:
-                                        widgetRef.gridAttribute(column, row)
-                                case _:
-                                    pass
+                        self.effectWidgetPacks[Effect]['armour_attack_quantity'].label.grid_forget()
+                        self.effectWidgetPacks[Effect]['armour_attack_quantity'].grid_forget()
+                        self.effectWidgetPacks[Effect]['armour_attack_class'].label.grid_forget()
+                        self.effectWidgetPacks[Effect]['armour_attack_class'].grid_forget()
+                        self.effectWidgetPacks[Effect]['quantity'].gridAttribute(
+                            EFFECT_WIDGET_FORM['quantity'][1],
+                            EFFECT_WIDGET_FORM['quantity'][2]
+                        )
+                elif effect is not None and effect.effect_type in self.EFFECTS_OBJATTR_WITH_AA_CLASS:
+                    value = var.get()
+                    if value in self.ATTRIBUTES_WITH_AA:
+                        self.effectWidgetPacks[Effect]['armour_attack_class'].gridAttribute(
+                            EFFECT_WIDGET_FORM['armour_attack_class'][1],
+                            EFFECT_WIDGET_FORM['armour_attack_class'][2]
+                        )
+                    else:
+                        self.effectWidgetPacks[Effect]['armour_attack_class'].label.grid_forget()
+                        self.effectWidgetPacks[Effect]['armour_attack_class'].grid_forget()
 
-                def __loadConditionType(*args):
-                    """Event when load condition type from scenario."""
-                    newType = self.wCType.variable.get()
-                    __showAttributeWidgets(newType, 'condition')
+            if attribute not in self.effectWidgetPacks[ceType]:
+                # Create widget in first use, not app start
+                match formDict[attribute][0]:
+                    case 'Entry':
+                        self.effectWidgetPacks[ceType][attribute] = self.AttributeEntry(self.app, self, attribute, ceType, formDict[attribute][3])
+                    case 'Combobox':
+                        self.effectWidgetPacks[ceType][attribute] = self.AttributeCombobox(self.app, self,
+                                                                                self.__constructEffectComboboxDicts(attribute),
+                                                                                attribute, ceType)
+                        if ceType == Effect and attribute == 'object_attributes':
+                            self.effectWidgetPacks[ceType][attribute].variable.trace_add(
+                                'write',
+                                lambda *args, var=self.effectWidgetPacks[ceType][attribute].variable:object_attributes_widget(var))
+                    case 'Checkbutton':
+                        self.effectWidgetPacks[ceType][attribute] = self.AttributeCheckbutton(self.app, self, attribute, ceType)
+                    case 'TextOrEntry':
+                        self.effectWidgetPacks[ceType][attribute] = self.AttributeText(self.app, self, attribute, ceType)
+                        self.effectWidgetPacks[ceType]['__variant_' + attribute] = self.AttributeEntry(self.app, self,
+                                                                                            '__variant_' + attribute, ceType, formDict[attribute][3])
+                    case 'MultiUnitSelector':
+                        self.effectWidgetPacks[ceType][attribute] = self.AttributeUnitsButton(self.app, self, attribute, ceType, multi=True)
+                    case 'SingleUnitSelector':
+                        self.effectWidgetPacks[ceType][attribute] = self.AttributeUnitsButton(self.app, self, attribute, ceType, multi=False)
+                    case 'UnitConstSelector':
+                        self.effectWidgetPacks[ceType][attribute] = self.AttributeUnitConstButton(self.app, self, attribute, ceType)
+                    case 'AreaSelector':
+                        self.effectWidgetPacks[ceType][attribute] = self.AttributeAreaButton(self.app, self, attribute, ceType)
+                    case _:
+                        pass
 
-                def __modifyConditionType(*args):
-                    """Event when set condition type from widget."""
-                    newType = self.wCType.variable.get()
-                    curItem = self.tl.focus()
-                    condition = self.app.fTEditor.getCondition(curItem)
-                    if condition is not None:
-                        condition.condition_type = newType
-                        # Todo: reset condition arg
-                        self.updateConditionTreeNode(curItem, condition)
-                    self.app.itemSelect(None)
-                    # __showAttributeWidgets(newType, 'condition')
+        def __showAttributeWidgets(effectTypeId: int, nodeType: Literal['effect', 'condition']) -> None:
+            for ce in self.effectWidgetPacks:
+                for widgetPack in self.effectWidgetPacks[ce].values():
+                    widgetPack: CeInfoView.AttributeWidget
+                    widgetPack.label.grid_forget()
+                    widgetPack.grid_forget()
+            if nodeType == 'effect':
+                attributesDict = EFFECT_ATTRIBUTES
+                attrWidgetFormDict = EFFECT_WIDGET_FORM
+                ceType = Effect
+            else:
+                attributesDict = CONDITION_ATTRIBUTES
+                attrWidgetFormDict = CONDITION_WIDGET_FORM
+                ceType = Condition
+            for attribute in attributesDict.get(effectTypeId, []):
+                __createAttributeWidgets(attrWidgetFormDict, attribute, ceType)
+                if attribute not in self.effectWidgetPacks[ceType]:
+                    continue
+                widgetRef: CeInfoView.AttributeWidget = self.effectWidgetPacks[ceType][attribute]
+                column, row = attrWidgetFormDict[attribute][1], attrWidgetFormDict[attribute][2]
+                if column != -1 and row != -1:
+                    match attrWidgetFormDict[attribute][0]:
+                        case 'Entry':
+                            widgetRef.gridAttribute(column, row)
+                            if attribute == 'string_id' and effectTypeId in [26, 59, 60, 65, 88]:
+                                widgetRef.gridAttribute(1, 1)
+                        case 'Combobox':
+                            widgetRef: CeInfoView.AttributeCombobox
+                            if attribute == 'trigger_id':
+                                # Get trigger name mapping
+                                widgetRef.update_mapping( \
+                                    {trigger.trigger_id: trigger.name for trigger in self.tm.triggers})
+                            elif attribute == 'source_player' or attribute == 'target_player':
+                                # Get player amount
+                                widgetRef.update_mapping( \
+                                    {i:getPlayerAbstract(i) for i in range(0, self.app.activeScenario.player_manager.active_players + 1)})
+                            widgetRef.gridAttribute(column, row)
+                        case 'Checkbutton':
+                            widgetRef.gridAttribute(column, row)
+                        case 'TextOrEntry':
+                            if effectTypeId in [26, 48, 51, 56, 59, 60, 65, 79, 81, 82, 83, 87, 88, 104, 105, 106]:
+                                # These use single line entry
+                                if effectTypeId in [26, 59, 60, 65, 88]:
+                                    # These entry's grid occupied by other attribute so grid elsewhere
+                                    self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(1, 2, columnspan=2)
+                                else:
+                                    self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(column, row)
+                            else:
+                                # Else use large text widget
+                                widgetRef.gridAttribute(column, row,
+                                                        columnspan=2, rowspan=3)
+                        case 'MultiUnitSelector' | 'SingleUnitSelector':
+                            widgetRef.gridAttribute(column, row)
+                        case 'UnitConstSelector':
+                            widgetRef.gridAttribute(column, row)
+                        case 'AreaSelector':
+                            if 'location_object_reference' in attributesDict.get(effectTypeId, []) and \
+                                attribute == 'location_x':
+                                widgetRef.gridAttributeWithUnitSel(column, row)
+                            else:
+                                widgetRef.gridAttribute(column, row)
+                        case _:
+                            pass
 
-                def __loadEffectType(*args):
-                    """Event when load effect type from scenario."""
-                    newType = self.wEType.variable.get()
-                    __showAttributeWidgets(newType, 'effect')
+        def __loadConditionType(*args):
+            """Event when load condition type from scenario."""
+            newType = self.wCType.variable.get()
+            __showAttributeWidgets(newType, 'condition')
 
-                def __modifyEffectType(*args):
-                    """Event when set effect type from widget."""
-                    newType = self.wEType.variable.get()
-                    curItem = self.tl.focus()
-                    effect = self.app.fTEditor.getEffect(curItem)
-                    if effect is not None:
-                        effect.effect_type = newType
-                        # Todo: reset effect arg
-                        self.updateEffectTreeNode(curItem, effect)
-                    self.app.itemSelect(None)
-                    # __showAttributeWidgets(newType, 'effect')
+        def __modifyConditionType(*args):
+            """Event when set condition type from widget."""
+            newType = self.wCType.variable.get()
+            curItem = self.tl.focus()
+            condition = self.app.fTEditor.getCondition(curItem)
+            if condition is not None:
+                condition.condition_type = newType
+                # Todo: reset condition arg
+                self.updateConditionTreeNode(curItem, condition)
+            self.app.itemSelect(None)
+            # __showAttributeWidgets(newType, 'condition')
 
-                self.grid_columnconfigure(0, minsize=self.app.dpi(100))
-                self.grid_columnconfigure(1, minsize=self.app.dpi(100))
-                self.grid_columnconfigure(2, minsize=self.app.dpi(100))
-                self.grid_columnconfigure(3, minsize=self.app.dpi(100), weight=2)
-                self.grid_columnconfigure(4, weight=1)
-                self.grid_columnconfigure(5, weight=1)
-                self.grid_columnconfigure(6, weight=1)
-                self.grid_columnconfigure(7, weight=1)
-                self.grid_rowconfigure(6,weight=1)
+        def __loadEffectType(*args):
+            """Event when load effect type from scenario."""
+            newType = self.wEType.variable.get()
+            __showAttributeWidgets(newType, 'effect')
 
-                self.wCType = self.AttributeCombobox(self.app, self, self.__constructEffectComboboxDicts('condition_type'),
-                                                    'condition_type', Condition)
-                self.wEType = self.AttributeCombobox(self.app, self, self.__constructEffectComboboxDicts('effect_type'),
-                                                    'effect_type', Effect)
-                self.wCType.set_display_event(__modifyConditionType)
-                self.wCType.set_variable_event(__loadConditionType)
-                self.wEType.set_display_event(__modifyEffectType)
-                self.wEType.set_variable_event(__loadEffectType)
-                
-                self.effectWidgetPacks = {Condition: {}, Effect: {}}
+        def __modifyEffectType(*args):
+            """Event when set effect type from widget."""
+            newType = self.wEType.variable.get()
+            curItem = self.tl.focus()
+            effect = self.app.fTEditor.getEffect(curItem)
+            if effect is not None:
+                effect.effect_type = newType
+                # Todo: reset effect arg
+                self.updateEffectTreeNode(curItem, effect)
+            self.app.itemSelect(None)
+            # __showAttributeWidgets(newType, 'effect')
 
-            # createTriggerInfo()
-            createConditionEffectInfo()
+        self.grid_columnconfigure(0, minsize=self.app.dpi(100))
+        self.grid_columnconfigure(1, minsize=self.app.dpi(100))
+        self.grid_columnconfigure(2, minsize=self.app.dpi(100))
+        self.grid_columnconfigure(3, minsize=self.app.dpi(100), weight=2)
+        self.grid_columnconfigure(4, weight=1)
+        self.grid_columnconfigure(5, weight=1)
+        self.grid_columnconfigure(6, weight=1)
+        self.grid_columnconfigure(7, weight=1)
+        self.grid_rowconfigure(6,weight=1)
+        self.grid_rowconfigure(10,minsize=self.app.dpi(10)) # Bottom padding
 
-        self.zvMapView: ZoomImageViewer
+        self.wCType = self.CeTypeCombobox(self.app, self, self.__constructEffectComboboxDicts('condition_type'),
+                                            'condition_type', Condition, style='ceTypes.TCombobox')
+        self.wEType = self.CeTypeCombobox(self.app, self, self.__constructEffectComboboxDicts('effect_type'),
+                                            'effect_type', Effect, style='ceTypes.TCombobox')
+        self.wCType.set_display_event(__modifyConditionType)
+        self.wCType.set_variable_event(__loadConditionType)
+        self.wEType.set_display_event(__modifyEffectType)
+        self.wEType.set_variable_event(__loadEffectType)
         
-        self.varTName: ttk.StringVar
-        self.varTEnable: ttk.BooleanVar
-        self.varTLoop: ttk.BooleanVar
-        self.varTDescriptionOrder: ttk.StringVar
-        self.varTDescriptionStringTable: ttk.StringVar
-        self.varTShortDescriptionStringTable: ttk.StringVar
-        self.varTAsObjective: ttk.BooleanVar
-        self.varTOnScreen: ttk.BooleanVar
-        self.varTMakeHeader: ttk.BooleanVar
-        self.varTMuteObjective: ttk.BooleanVar
-
-        self.tTDescription: ttk.Text
-        self.tTShortDscr: ttk.Text
-        self.wCType: CeInfoView.AttributeCombobox
-        self.wEType: CeInfoView.AttributeCombobox
-
         self.effectWidgetPacks: dict[type, dict[str, CeInfoView.AttributeWidget]] = {Condition: {}, Effect: {}}
-        createTceInfo()
 
     # region CEWidgets
 
@@ -268,6 +244,21 @@ class CeInfoView(ttk.Frame):
         @abstractmethod
         def load(self, value):
             pass
+
+    class CeTypeCombobox(FilteredMappedCombobox, AttributeWidget):
+        def __init__(self, outer: 'TCWindow', master, mapping: dict, attribute: str,
+                     ceType: type, **kwargs):
+            if ceType == Effect:
+                title = TEXT['effectAttributeName'][attribute]
+            else:
+                title = TEXT['conditionAttributeName'][attribute]
+            self.outer = outer
+            self.variable = ttk.IntVar()
+            self.label = ttk.Label(master, text=title)
+            super().__init__(master, mapping, self.variable, **kwargs)
+
+        def load(self, value: int):
+            self.variable.set(value)
 
     class AttributeCombobox(MappedCombobox, AttributeWidget):
         def __init__(self, outer: 'TCWindow', master, mapping: dict, attribute: str,

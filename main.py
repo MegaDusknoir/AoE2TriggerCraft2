@@ -388,6 +388,7 @@ class TCWindow():
     def __createMainWindow(self):
         # tkfont.nametofont('TkDefaultFont').config(family='Segoe UI')
         defaultFont = tkfont.nametofont('TkDefaultFont')
+        self.style.configure('ceTypes.TCombobox', postoffset=self.dpi((0, 0, 80, 0)))
         self.style.configure('Borderless.Treeview', borderwidth=0,
                              background=self.style.colors.bg, font=(defaultFont.cget('family'), 9), rowheight=self.dpi(20))
         self.style.configure('sideBarExpand.secondary.TButton', borderwidth=0, font=(defaultFont.cget('family'), 8),

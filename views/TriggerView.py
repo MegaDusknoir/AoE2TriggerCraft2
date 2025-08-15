@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 def copyEffect(effect: Effect, parent: Trigger):
     trigger = parent
-    srcEffect = effect
+    srcEffect = copy.deepcopy(effect)
     newEffect = trigger.new_effect.none()
     newEffect.effect_type = srcEffect.effect_type
     for attribute in EFFECT_ATTRIBUTES.get(srcEffect.effect_type, []):
@@ -32,7 +32,7 @@ def copyEffect(effect: Effect, parent: Trigger):
 
 def copyCondition(condition: Condition, parent: Trigger):
     trigger = parent
-    srcCondition = condition
+    srcCondition = copy.deepcopy(condition)
     newCondition = trigger.new_condition.none()
     newCondition.condition_type = srcCondition.condition_type
     for attribute in CONDITION_ATTRIBUTES.get(srcCondition.condition_type, []):
@@ -251,6 +251,13 @@ class TriggerView(ttk.Frame):
             self.tvTriggerList.configure(yscrollcommand=tvsbTriggerList.set)
             self.tvTriggerList.column('#0', width=self.app.dpi(200))
             self.tvTriggerList.column('#1', width=self.app.dpi(100), anchor=E, stretch=False)
+            self.tvTriggerList.bind('<Control-x>', lambda *args: self.tceCopyToClipboard(cut=True))
+            self.tvTriggerList.bind('<Control-X>', lambda *args: self.tceCopyToClipboard(cut=True))
+            self.tvTriggerList.bind('<Control-c>', lambda *args: self.tceCopyToClipboard())
+            self.tvTriggerList.bind('<Control-C>', lambda *args: self.tceCopyToClipboard())
+            self.tvTriggerList.bind('<Control-v>', lambda *args: self.tcePasteFromClipboard())
+            self.tvTriggerList.bind('<Control-V>', lambda *args: self.tcePasteFromClipboard())
+            self.tceClipboard = None
 
             tvsbTriggerList.pack(side=RIGHT, fill=Y)
             self.tvTriggerList.pack(side=RIGHT, fill=BOTH, expand=YES)
@@ -259,6 +266,7 @@ class TriggerView(ttk.Frame):
         self.varTSelectBack: ttk.StringVar
         self.varTSelectTarget: ttk.StringVar
         self.tvTriggerList: TriggerTreeView
+        self.tceClipboard: Trigger|Condition|Effect
         createControlPanel()
         createTriggerList()
 
@@ -299,6 +307,72 @@ class TriggerView(ttk.Frame):
                                                    tceId=eId, tceDisplayId=eDisplayId, image=self.app.imgEffectEnabled, tceType='effect')
 
     # region TriggerViewOperation
+
+    def tceCopyToClipboard(self, cut=False):
+        curItem = self.tl.focus()
+        match self.tl.itemType(curItem):
+            case 'trigger':
+                triggerId = self.tl.getNodeId(curItem)[0]
+                trigger = self.tm.get_trigger(triggerId)
+                self.tceClipboard = copy.deepcopy(trigger)
+            case 'condition':
+                parent = self.tl.getTriggerNode(curItem)
+                triggerId = self.tl.getNodeId(parent)[0]
+                trigger = self.tm.get_trigger(triggerId)
+                ceId, _ = self.tl.getNodeId(curItem)
+                self.tceClipboard = copy.deepcopy(trigger.conditions[ceId])
+            case 'effect':
+                parent = self.tl.getTriggerNode(curItem)
+                triggerId = self.tl.getNodeId(parent)[0]
+                trigger = self.tm.get_trigger(triggerId)
+                ceId, _ = self.tl.getNodeId(curItem)
+                self.tceClipboard = copy.deepcopy(trigger.effects[ceId])
+            case _:
+                return
+        if cut:
+            self.itemDelete()
+
+    def tcePasteFromClipboard(self):
+        if self.tceClipboard == None:
+            return
+        curItem = self.tl.focus()
+        if type(self.tceClipboard) == Trigger:
+            if curItem == '':
+                insertIndex = len(self.tm.triggers)
+            else:
+                curItem = self.tl.getTriggerNode(curItem)
+                _, insertIndex = self.tl.getNodeId(curItem)
+                insertIndex += 1
+            newTrigger = copy.deepcopy(self.tceClipboard)
+            newTrigger.trigger_id = len(self.tm.triggers)
+            self.tm.triggers.append(newTrigger)
+            self.tm.trigger_display_order.insert(insertIndex + 1, self.tm.trigger_display_order.pop())
+            self.triggerNewAfter(insertIndex - 1, newTrigger)
+        elif type(self.tceClipboard) in [Condition, Effect]:
+            if curItem == '':
+                return
+            parent = self.tl.getTriggerNode(curItem)
+            triggerId = self.tl.getNodeId(parent)[0]
+            trigger = self.tm.get_trigger(triggerId)
+            if type(self.tceClipboard) == Condition:
+                if self.tl.itemType(curItem) in ['trigger', 'effect']:
+                    insertIndex = len(trigger.conditions)
+                else:
+                    _, insertIndex = self.tl.getNodeId(curItem)
+                    insertIndex += 1
+                newCondition = copyCondition(self.tceClipboard, trigger)
+                trigger.condition_order.insert(insertIndex, trigger.condition_order.pop())
+                self.ceAdd(parent, 'condition', newCondition, insertIndex)
+            else:
+                if self.tl.itemType(curItem) in ['trigger', 'condition']:
+                    insertIndex = len(trigger.effects)
+                else:
+                    _, insertIndex = self.tl.getNodeId(curItem)
+                    insertIndex += 1
+                newEffect = copyEffect(self.tceClipboard, trigger)
+                trigger.effect_order.insert(insertIndex, trigger.effect_order.pop())
+                self.ceAdd(parent, 'effect', newEffect, insertIndex)
+
     def triggerAdd(self):
         """New a trigger after selected trigger, append if nothing selected."""
         triggerCount = len(self.tm.trigger_display_order)
@@ -347,26 +421,39 @@ class TriggerView(ttk.Frame):
             itemCE = self.tl.insert(itemTrigger, END, text=abstractEffect(effect),
                                                tceId=eId, tceDisplayId=eDisplayId, image=self.app.imgEffectEnabled, tceType='effect')
 
-    def ceAdd(self, parent: str, tag: str, obj: Effect|Condition):
+    def ceAdd(self, parent: str, tag: str, obj: Effect|Condition, insertIndex:int=None):
         self.tl.item(parent, open=True)
         effectEndIndex = len(self.tl.get_children(parent))
         effectBeginIndex = effectEndIndex
         for child in self.tl.get_children(parent):
-            if 'effect' in self.tl.item(child)['tags']:
+            if self.tl.itemType(child) == 'effect':
                 effectBeginIndex = self.tl.index(child)
                 break
+        if insertIndex is None:
+            insertIndex = effectEndIndex if tag == 'effect' else effectBeginIndex
         if tag == 'effect':
-            itemIndex = effectEndIndex
-            ceIndex = itemIndex - effectBeginIndex
+            itemIndex = effectBeginIndex + insertIndex
+            if itemIndex > effectEndIndex:
+                raise ValueError('Insert index out of range')
+            ceIndex = effectEndIndex - effectBeginIndex
             ceName = abstractEffect(obj)
             ceImage = self.app.imgEffectEnabled
         else:
-            itemIndex = effectBeginIndex
-            ceIndex = itemIndex
+            itemIndex = insertIndex
+            if itemIndex > effectBeginIndex:
+                raise ValueError('Insert index out of range')
+            ceIndex = effectBeginIndex
             ceName = abstractCondition(obj)
             ceImage = self.app.imgConditionEnabled
         itemCE = self.tl.insert(parent, itemIndex, text=ceName,
-                                           tceId=ceIndex,tceDisplayId=ceIndex, image=ceImage, tceType=tag)
+                                           tceId=ceIndex,tceDisplayId=insertIndex, image=ceImage, tceType=tag)
+
+        next = self.tl.next(itemCE)
+        while next != '' and self.tl.itemType(next) == tag:
+            id, displayId = self.tl.getNodeId(next)
+            self.tl.setNodeId(next, (id, displayId + 1))
+            next = self.tl.next(next)
+
         # See if out of sight
         if not self.tl.bbox(itemCE):
             self.tl.see(itemCE)
@@ -379,12 +466,18 @@ class TriggerView(ttk.Frame):
             return
         parent = self.tl.getTriggerNode(curItem)
         triggerId = self.tl.getNodeId(parent)[0]
+        trigger = self.tm.get_trigger(triggerId)
 
-        # Call AoE2SP
-        newEffect = self.tm.get_trigger(triggerId).new_effect.none()
-        # print(self.tm.get_trigger(triggerId).effect_order)
+        if self.tl.itemType(curItem) == 'effect':
+            _, insertIndex = self.tl.getNodeId(curItem)
+            insertIndex += 1
+        else:
+            insertIndex = len(trigger.effects)
 
-        self.ceAdd(parent, 'effect', newEffect)
+        newEffect = trigger.new_effect.none()
+        trigger.effect_order.insert(insertIndex, trigger.effect_order.pop())
+
+        self.ceAdd(parent, 'effect', newEffect, insertIndex)
 
     def conditionAdd(self):
         curItem = self.tl.focus()
@@ -392,12 +485,18 @@ class TriggerView(ttk.Frame):
             return
         parent = self.tl.getTriggerNode(curItem)
         triggerId = self.tl.getNodeId(parent)[0]
+        trigger = self.tm.get_trigger(triggerId)
 
-        # Call AoE2SP
-        newCondition = self.tm.get_trigger(triggerId).new_condition.none()
-        # print(self.tm.get_trigger(triggerId).condition_order)
+        if self.tl.itemType(curItem) == 'condition':
+            _, insertIndex = self.tl.getNodeId(curItem)
+            insertIndex += 1
+        else:
+            insertIndex = len(trigger.conditions)
 
-        self.ceAdd(parent, 'condition', newCondition)
+        newCondition = trigger.new_condition.none()
+        trigger.condition_order.insert(insertIndex, trigger.condition_order.pop())
+
+        self.ceAdd(parent, 'condition', newCondition, insertIndex)
 
     def itemDelete(self):
         curItem = self.tl.focus()
@@ -554,11 +653,15 @@ class TriggerView(ttk.Frame):
         elif nodeType == 'condition':
             trigger = self.tm.get_trigger(triggerId)
             newCondition = copyCondition(trigger.conditions[idToDuplicate], trigger)
-            self.ceAdd(parent, 'condition', newCondition)
+            insertIndex = displayIdToDuplicate + 1
+            trigger.condition_order.insert(insertIndex, trigger.condition_order.pop())
+            self.ceAdd(parent, 'condition', newCondition, insertIndex)
         else:
             trigger = self.tm.get_trigger(triggerId)
             newEffect = copyEffect(trigger.effects[idToDuplicate], trigger)
-            self.ceAdd(parent, 'effect', newEffect)
+            insertIndex = displayIdToDuplicate + 1
+            trigger.effect_order.insert(insertIndex, trigger.effect_order.pop())
+            self.ceAdd(parent, 'effect', newEffect, insertIndex)
 
         # See if out of sight
         if not self.tl.bbox(self.tl.next(curItem)):
@@ -612,9 +715,15 @@ class TriggerView(ttk.Frame):
                                                 include_player_source = self.app.options.includeSource.get(),
                                                 include_player_target = self.app.options.includeTarget.get(),
                                                 create_copy_for_players = create_copy_for_players)
+            newCeCount = len(newConditions)
+            trigger.condition_order = \
+                trigger.condition_order[0 : displayIdToDuplicate + 1] + \
+                trigger.condition_order[-newCeCount:] + \
+                trigger.condition_order[displayIdToDuplicate + 1 : -newCeCount]
+            insertIndex = displayIdToDuplicate + 1
             for newCondition in newConditions.values():
-                self.ceAdd(parent, 'condition', newCondition)
-            # Todo: move to source
+                self.ceAdd(parent, 'condition', newCondition, insertIndex)
+                insertIndex += 1
         else:
             trigger = self.tm.get_trigger(triggerId)
             effect = trigger.effects[idToDuplicate]
@@ -623,8 +732,15 @@ class TriggerView(ttk.Frame):
                                                 include_player_source = self.app.options.includeSource.get(),
                                                 include_player_target = self.app.options.includeTarget.get(),
                                                 create_copy_for_players = create_copy_for_players)
+            newCeCount = len(newEffects)
+            trigger.effect_order = \
+                trigger.effect_order[0 : displayIdToDuplicate + 1] + \
+                trigger.effect_order[-newCeCount:] + \
+                trigger.effect_order[displayIdToDuplicate + 1 : -newCeCount]
+            insertIndex = displayIdToDuplicate + 1
             for newEffect in newEffects.values():
-                self.ceAdd(parent, 'effect', newEffect)
+                self.ceAdd(parent, 'effect', newEffect, insertIndex)
+                insertIndex += 1
 
         # See if out of sight
         if not self.tl.bbox(next):

@@ -434,7 +434,6 @@ class MappedCombobox(ttk.Combobox):
         super().__init__(master, textvariable=self.display_var, values=list(mapping.values()), **kwargs)
 
         # Combobox -> 变量
-        # self.bind("<<ComboboxSelected>>", self._on_display_change)
         self.display_var.trace_add("write", self._on_display_change)
 
         # 变量 -> Combobox 显示
@@ -481,6 +480,92 @@ class MappedCombobox(ttk.Combobox):
         self._updating_text = False
         if self._variable_event:
             self._variable_event()
+
+class FilteredMappedCombobox(ttk.Combobox):
+    def __init__(self, master, mapping: dict, variable: ttk.IntVar, **kwargs):
+        self.mapping = mapping  # 数字 -> 文本
+        self.inverse_mapping = {v: k for k, v in mapping.items()}
+        self.variable = variable
+        self._updating_text = False
+        self._updating_int = False
+        self._variable_event = None
+        self._display_event = None
+        self._all_values: list[str] = list(mapping.values())
+
+        # Combobox 实际显示的文本
+        self.display_var = ttk.StringVar()
+        super().__init__(master, textvariable=self.display_var, values=list(mapping.values()), **kwargs)
+
+        # Combobox -> 变量
+        self.bind("<<ComboboxSelected>>", self._on_select)
+        self.display_var.trace_add('write', self._on_text_change)
+        self.bind("<Return>", self._on_enter)
+
+        # 变量 -> Combobox 显示
+        self.variable.trace_add("write", self._on_var_change)
+
+    def update_mapping(self, mapping: dict):
+        self.mapping = mapping
+        self.inverse_mapping = {v: k for k, v in mapping.items()}
+        super().configure(values=list(mapping.values()))
+
+    def set_variable_event(self, event):
+        """Event called when variable set directly"""
+        self._variable_event = event
+
+    def set_display_event(self, event):
+        """Event called when display_var or widget text modified"""
+        self._display_event = event
+
+    def _on_select(self, *args):
+        self['values'] = self._all_values
+        val = self.display_var.get()
+        self._updating_int = True
+        if val in self.inverse_mapping:
+            self.variable.set(self.inverse_mapping[val])
+        elif ReCompiled.matchInteger(val) is not None:
+            self.variable.set(int(val))
+        # 若输入非法，保持原值不变
+        self._updating_int = False
+        if self._display_event:
+            self._display_event()
+
+    def _on_var_change(self, *args):
+        if self._updating_int:
+            return
+        self['values'] = self._all_values
+        val = self.variable.get()
+        self._updating_text = True
+        if val in self.mapping:
+            self.display_var.set(self.mapping[val])
+        else:
+            self.display_var.set(str(val))
+        self._updating_text = False
+        if self._variable_event:
+            self._variable_event()
+
+    def _on_enter(self, *args):
+        val = self.display_var.get()
+        if val in self.inverse_mapping:
+            # Select if completely match
+            self._on_select(args)
+        elif self['values']:
+            # Select first if match more than 0
+            self.current(0)
+            self._on_select(args)
+
+    def _on_text_change(self, *args):
+        if self._updating_text:
+            return
+        val = self.display_var.get()
+        if val == '':
+            self['values'] = self._all_values
+        elif ReCompiled.matchInteger(val) is not None:
+            self['values'] = [self.mapping[int(val)],] if int(val) in self.mapping.keys() else [int(val),]
+        else:
+            start_filtered = [v for v in self._all_values if v.lower().startswith(val.lower())]
+            in_filtered = [v for v in self._all_values if v not in start_filtered and val.lower() in v.lower()]
+            self['values'] = start_filtered + in_filtered
 
 class Tooltip:
     def __init__(self, widget, text, delay=500):
