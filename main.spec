@@ -14,10 +14,10 @@ def getPackagePath(package_name):
 package_path = getPackagePath("AoE2ScenarioParser")
 
 added_files = [
-         ( f'{package_path}/versions/DE/v1.55/conditions.json', './AoE2ScenarioParser/versions/DE/v1.55'), 
-         ( f'{package_path}/versions/DE/v1.55/effects.json', './AoE2ScenarioParser/versions/DE/v1.55'), 
-         ( f'{package_path}/versions/DE/v1.55/structure.json', './AoE2ScenarioParser/versions/DE/v1.55'), 
-         ( f'{package_path}/versions/DE/v1.55/default.aoe2scenario', './AoE2ScenarioParser/versions/DE/v1.55'), 
+         ( f'{package_path}/versions/DE/v1.56/conditions.json', './AoE2ScenarioParser/versions/DE/v1.56'), 
+         ( f'{package_path}/versions/DE/v1.56/effects.json', './AoE2ScenarioParser/versions/DE/v1.56'), 
+         ( f'{package_path}/versions/DE/v1.56/structure.json', './AoE2ScenarioParser/versions/DE/v1.56'), 
+         ( f'{package_path}/versions/DE/v1.56/default.aoe2scenario', './AoE2ScenarioParser/versions/DE/v1.56'), 
          ]
 
 a = Analysis(

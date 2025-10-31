@@ -109,4 +109,6 @@ EFFECT_WIDGET_FORM = {
     "quantity_float": ('null',-1,-1,float), # hidden attr
     "facet2": ('Combobox',2,2,int),
     "global_sound": ('Checkbutton',2,0,int),
+    "issue_group_command": ('Checkbutton',3,0,int),
+    "queue_action": ('Checkbutton',4,0,int),
 }

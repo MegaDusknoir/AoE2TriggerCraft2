@@ -31,9 +31,9 @@ def createCeAttributeDict(outPath):
 
     package_path = getPackagePath("AoE2ScenarioParser")
 
-    with open(f'{package_path}/versions/DE/v1.55/effects.json', 'r', encoding='utf-8') as f:
+    with open(f'{package_path}/versions/DE/v1.56/effects.json', 'r', encoding='utf-8') as f:
         effectStruct = json.load(f)
-    with open(f'{package_path}/versions/DE/v1.55/conditions.json', 'r', encoding='utf-8') as f:
+    with open(f'{package_path}/versions/DE/v1.56/conditions.json', 'r', encoding='utf-8') as f:
         conditionStruct = json.load(f)
 
     effectAttributes = {}

@@ -412,7 +412,9 @@
         "object_type2": "Object Type",
         "quantity_float": "Quantity",
         "facet2": "Face To",
-        "global_sound": "Global Sound"
+        "global_sound": "Global Sound",
+        "issue_group_command": "Issue Command to Formation",
+        "queue_action": "Queue Action"
     },
     "effectNameFormatForUnknown": "<Effect: Unknown {0}>",
     "effectName": {

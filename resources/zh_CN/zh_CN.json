@@ -419,7 +419,9 @@
         "object_type2": "物体类型",
         "quantity_float": "数量",
         "facet2": "朝向",
-        "global_sound": "全局音效"
+        "global_sound": "全局音效",
+        "issue_group_command": "向阵形发出命令",
+        "queue_action": "列队操作"
     },
     "effectNameFormatForUnknown": "<效果: 未知 {0}>",
     "effectName": {
