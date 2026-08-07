@@ -518,8 +518,12 @@ class CeInfoView(ttk.Frame):
                 title = TEXT['effectAttributeName']['location']
                 encodeMethod = lambda pointList: getLocationAbstract(pointList[0], pointList[1],
                                                                      pointList[2])
-            else:
+            elif attribute == 'area_x1':
                 title = TEXT['effectAttributeName']['area']
+                encodeMethod = lambda pointList: getAreaAbstract(pointList[0], pointList[1],
+                                                                pointList[2], pointList[3])
+            else:
+                title = TEXT['effectAttributeName']['wall']
                 encodeMethod = lambda pointList: getAreaAbstract(pointList[0], pointList[1],
                                                                 pointList[2], pointList[3])
             self.attribute = attribute
@@ -565,7 +569,7 @@ class CeInfoView(ttk.Frame):
 
         def __setAttributeArea(self) -> None:
             x1, y1, x2, y2 = self.outer.fMapViewTab.pointSelect.get()
-            if self.attribute == 'area_x1':
+            if self.attribute in ('area_x1', 'wall_x1'):
                 if (x2, y2) == (-1, -1):
                     x2, y2 = x1, y1
                 if x1 > x2:
@@ -580,7 +584,7 @@ class CeInfoView(ttk.Frame):
         def __viewAttributeArea(self):
             coords = self.variable.get()
             if len(coords) != 0:
-                if self.attribute == 'area_x1':
+                if self.attribute in ('area_x1', 'wall_x1'):
                     x1, y1, x2, y2 = coords
                     if (x1, y1) == (-1, -1):
                         self.outer.fMapViewTab.drawClear()
@@ -610,6 +614,12 @@ class CeInfoView(ttk.Frame):
                     setattr(ce, 'area_y1', y1)
                     setattr(ce, 'area_x2', x2)
                     setattr(ce, 'area_y2', y2)
+                elif self.attribute == 'wall_x1':
+                    x1, y1, x2, y2 = self.variable.get()
+                    setattr(ce, 'wall_x1', x1)
+                    setattr(ce, 'wall_y1', y1)
+                    setattr(ce, 'wall_x2', x2)
+                    setattr(ce, 'wall_y2', y2)
                 elif self.attribute == 'location_x':
                     x, y, unit = self.variable.get()
                     setattr(ce, 'location_x', x)
@@ -638,7 +648,7 @@ class CeInfoView(ttk.Frame):
             case 'technology':
                 return TECH_NAME
             case 'local_technology':
-                return {} # Todo: Fill what?
+                return TEXT['datasetLocalTechnology']
             case 'trigger_id':
                 return {} # update later
             case 'object_group' | 'object_group2':
@@ -687,6 +697,8 @@ class CeInfoView(ttk.Frame):
                 return TEXT['datasetVictoryTimerType']
             case 'decision_option':
                 return TEXT['datasetDecisionOption']
+            case 'object_filter':
+                return TEXT['datasetObjectModifyAttributeState']
             case _:
                 raise ValueError(f"Unknown effect attribute: {attribute}")
 
@@ -763,6 +775,13 @@ class CeInfoView(ttk.Frame):
                                     getattr(effect, 'area_y1'),
                                     getattr(effect, 'area_x2'),
                                     getattr(effect, 'area_y2'),
+                                ])
+                        elif attribute == 'wall_x1':
+                            self.effectWidgetPacks[Effect][attribute].load([
+                                    getattr(effect, 'wall_x1'),
+                                    getattr(effect, 'wall_y1'),
+                                    getattr(effect, 'wall_x2'),
+                                    getattr(effect, 'wall_y2'),
                                 ])
                     case _:
                         print(attribute, getattr(effect, attribute))

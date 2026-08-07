@@ -421,7 +421,12 @@
         "facet2": "朝向",
         "global_sound": "全局音效",
         "issue_group_command": "向阵形发出命令",
-        "queue_action": "列队操作"
+        "queue_action": "列队操作",
+        "mutual_diplomacy": "双方外交",
+        "building_list": "建筑列表",
+        "wall": "设置城墙",
+        "object_filter": "物体筛选器",
+        "use_tag_color_for_icon": "图标使用标签颜色"
     },
     "effectNameFormatForUnknown": "<效果: 未知 {0}>",
     "effectName": {
@@ -532,7 +537,9 @@
         "104": "修改种属属性",
         "105": "修改物体属性",
         "106": "根据变量修改物体属性",
-        "107": "更改物体能见度"
+        "107": "更改物体能见度",
+        "108": "建造物体",
+        "109": "对等外交"
     },
     "fmtMessageLengthLimit": 16,
     "fmtStringForceResearch": "强制",
@@ -1069,5 +1076,18 @@
         "129": "无敌等级",
         "130": "驻扎火力",
         "131": "攻击图示 2"
+    },
+    "datasetLocalTechnology": {
+        "1197": "防御城镇中心",
+        "1195": "经济城镇中心",
+        "1196": "军事城镇中心",
+        "1270": "强化哨站",
+        "1323": "防御炮台",
+        "1324": "进攻炮台"
+    },
+    "datasetObjectModifyAttributeState": {
+        "0": "全部",
+        "1": "未经修改",
+        "2": "有属性修改"
     }
 }

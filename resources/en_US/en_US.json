@@ -414,7 +414,12 @@
         "facet2": "Face To",
         "global_sound": "Global Sound",
         "issue_group_command": "Issue Command to Formation",
-        "queue_action": "Queue Action"
+        "queue_action": "Queue Action",
+        "mutual_diplomacy": "Mutual Diplomacy",
+        "building_list": "Building List",
+        "wall": "Set Wall",
+        "object_filter": "Object Filter",
+        "use_tag_color_for_icon": "Tag Color For Icon"
     },
     "effectNameFormatForUnknown": "<Effect: Unknown {0}>",
     "effectName": {
@@ -525,7 +530,9 @@
         "104": "Modify Attribute For Class",
         "105": "Modify Object Attribute",
         "106": "Modify Object Attribute By Variable",
-        "107": "Change Object Visibility"
+        "107": "Change Object Visibility",
+        "108": "Build Object",
+        "109": "Mirror Diplomacy"
     },
     "fmtMessageLengthLimit": 24,
     "fmtStringForceResearch": "force ",
@@ -1051,5 +1058,18 @@
         "129": "INVULNERABILITY_LEVEL",
         "130": "GARRISON_FIREPOWER",
         "131": "ATTACK_GRAPHIC_2"
+    },
+    "datasetLocalTechnology": {
+        "1197": "DEFENSIVE_TOWN_CENTER",
+        "1195": "ECONOMIC_TOWN_CENTER",
+        "1196": "MILITARY_TOWN_CENTER",
+        "1270": "FORTIFIED_OUTPOST",
+        "1323": "DEFENSIVE_EMPLACEMENT",
+        "1324": "OFFENSIVE_EMPLACEMENT"
+    },
+    "datasetObjectModifyAttributeState": {
+        "0": "ALL",
+        "1": "NOT_MODIFIED",
+        "2": "MODIFIED"
     }
 }
