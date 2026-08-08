@@ -77,7 +77,7 @@ if __name__ == '__main__':
     createVersionFile('_prebuild/version.py', versionTuple, versionString)
     updateVersionTxt('_prebuild/version.txt', 'version.txt', versionTuple, versionString)
 
-    result = subprocess.run(f'pyinstaller "{workDir}/main.spec" --distpath "{workDir}/release"', stdout=subprocess.PIPE, text=True)
+    result = subprocess.run(f'{sys.executable} -m PyInstaller "{workDir}/main.spec" --distpath "{workDir}/release"', stdout=subprocess.PIPE, text=True)
 
     if result.returncode != 0:
         print(f'Pyinstaller fail at {result.returncode}')

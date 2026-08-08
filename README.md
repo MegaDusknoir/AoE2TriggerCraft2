@@ -27,7 +27,7 @@ Manual (Not yet created)
 ### Prerequisites
 Install AoE2ScenarioParser
 ```
-pip install AoE2ScenarioParser Pillow ttkbootstrap parse genieutils-py jsonschema
+pip install AoE2ScenarioParser Pillow ttkbootstrap==1.14.0 parse genieutils-py jsonschema
 ```
 
 ### Preprocessing
