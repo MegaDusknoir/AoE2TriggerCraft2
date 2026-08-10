@@ -1,5 +1,4 @@
 
-from math import sqrt
 import os
 import sys
 import re
@@ -49,12 +48,10 @@ from views.MapView import MapView
 from views.MetaView import MetaView
 from views.TriggerInfo import TriggerInfoView
 from views.CeInfo import CeInfoView
-from Util import IntListVar, MappedCombobox, ListValueButton, PairValueEntry, Tooltip, ValueSelectButton, ZoomImageViewer
 from Util import DebugTimeCount
 from _prebuild.version import VERSION_STRING
 from _prebuild.AoE2TC_icon import Icon
-from _prebuild.CeAttributes import CONDITION_ATTRIBUTES, EFFECT_ATTRIBUTES
-from WidgetLayout import CONDITION_WIDGET_FORM, EFFECT_WIDGET_FORM
+from CeAttributesManager import CeAttributes
 
 if getattr(sys, 'frozen', False): # True if PyInstaller packed
     workDir = os.path.dirname(sys.executable)
@@ -64,6 +61,8 @@ else:
 ASPSettings.ENABLE_XS_CHECK_INTEGRATION = False
 ASPSettings.ALLOW_OVERWRITING_SOURCE = True
 # ASPSettings.ALLOW_DIRTY_RETRIEVER_OVERWRITE = True
+
+DEFAULT_VERSION = '.'.join(map(str, AoE2DEScenario.LATEST_VERSION))
 
 class CreateIcon():
     def __init__(self):
@@ -132,12 +131,12 @@ class TriggerJsonIO():
             triggerDict['effects'] = []
             for condition in trigger.conditions:
                 conditionDict = {'condition_type': condition.condition_type}
-                for attr in CONDITION_ATTRIBUTES.get(condition.condition_type, []):
+                for attr in CeAttributes.condition().get(condition.condition_type, []):
                     conditionDict[attr] = getattr(condition, attr)
                 triggerDict['conditions'].append(conditionDict)
             for effect in trigger.effects:
                 effectDict = {'effect_type': effect.effect_type}
-                for attr in EFFECT_ATTRIBUTES.get(effect.effect_type, []):
+                for attr in CeAttributes.effect().get(effect.effect_type, []):
                     effectDict[attr] = getattr(effect, attr)
                 triggerDict['effects'].append(effectDict)
             triggersList.append(triggerDict)
@@ -172,12 +171,12 @@ class TriggerJsonIO():
             for conditionDict in triggerDict['conditions']:
                 condition = trigger.new_condition.none()
                 condition.condition_type = conditionDict['condition_type']
-                for attr in CONDITION_ATTRIBUTES.get(condition.condition_type, []):
+                for attr in CeAttributes.condition().get(condition.condition_type, []):
                     setattr(condition, attr, conditionDict[attr])
             for effectDict in triggerDict['effects']:
                 effect = trigger.new_effect.none()
                 effect.effect_type = effectDict['effect_type']
-                for attr in EFFECT_ATTRIBUTES.get(effect.effect_type, []):
+                for attr in CeAttributes.effect().get(effect.effect_type, []):
                     setattr(effect, attr, effectDict[attr])
             trigger.condition_order = triggerDict['condition_order']
             trigger.effect_order = triggerDict['effect_order']
@@ -215,12 +214,12 @@ class TriggerJsonIO():
             for conditionDict in triggerDict['conditions']:
                 condition = trigger.new_condition.none()
                 condition.condition_type = conditionDict['condition_type']
-                for attr in CONDITION_ATTRIBUTES.get(condition.condition_type, []):
+                for attr in CeAttributes.condition().get(condition.condition_type, []):
                     setattr(condition, attr, conditionDict[attr])
             for effectDict in triggerDict['effects']:
                 effect = trigger.new_effect.none()
                 effect.effect_type = effectDict['effect_type']
-                for attr in EFFECT_ATTRIBUTES.get(effect.effect_type, []):
+                for attr in CeAttributes.effect().get(effect.effect_type, []):
                     setattr(effect, attr, effectDict[attr])
             trigger.condition_order = triggerDict['condition_order']
             trigger.effect_order = triggerDict['effect_order']
@@ -291,7 +290,7 @@ class TriggerJsonIO():
 
 class TCWindow():
 
-    def __init__(self, theme='darkly') -> None:
+    def __init__(self, scen='', theme='darkly') -> None:
         start_init = time.time()
 
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
@@ -315,6 +314,12 @@ class TCWindow():
         self.root.geometry(f'{self.dpi(1280)}x{self.dpi(720)}')
         self.root.protocol('WM_DELETE_WINDOW', self.windowClose)
         self.theme = theme
+        if scen != '':
+            self.initialOpen = os.path.normpath(scen)
+        else:
+            self.initialOpen = ''
+        self.activeScenario: AoE2DEScenario = None
+        self.restartToLoad = None
         self.style = ttk.Style()
         self.style.theme_use(self.theme)
         if self.theme in ('darkly'):
@@ -337,6 +342,9 @@ class TCWindow():
         elif self.askSaveScenario():
             self.root.destroy()
 
+    class LoadingDifferentVersionException(Exception):
+        pass
+
     def mainloop(self):
         """Call the mainloop."""
         with CreateIcon() as iconPath:
@@ -344,19 +352,30 @@ class TCWindow():
 
         # Show window before take time to load a scenario
         self.root.update()
-        self.openedScenPath = ''
-        self.generateDefaultScenario()
+        if self.initialOpen == '':
+            self.generateDefaultScenario()
+        else:
+            self.openScenario(self.initialOpen)
+            if self.activeScenario == None:
+                self.generateDefaultScenario()
         with CreateIcon() as iconPath:
             self.imgAbout = self.__loadImage(iconPath, self.dpi((128, 128)))
 
         self.root.mainloop()
+        if self.restartToLoad != None:
+            raise self.LoadingDifferentVersionException(self.restartToLoad)
 
     def generateDefaultScenario(self):
-        self.openedScenPath = ''
+        if self.activeScenario != None and DEFAULT_VERSION != self.activeScenario.scenario_version:
+            self.restartToLoad = ''
+            self.root.destroy()
+            return
         ASPSettings.PRINT_STATUS_UPDATES = False
         self.activeScenario = AoE2DEScenario.from_default()
         ASPSettings.PRINT_STATUS_UPDATES = True
         print('Loaded default scenario')
+        CeAttributes.setVersion(self.activeScenario.scenario_version)
+        self.openedScenPath = ''
         self.windowTitleTail = "default"
         self.triggerManager: TriggerManager = self.activeScenario.trigger_manager
         self.readScenario()
@@ -832,6 +851,28 @@ class TCWindow():
             self.__saveScen(saveFilePath)
         return saveFilePath
 
+    def readScenarioVersion(self, path):
+        with open(path, 'rb') as f:
+            version = f.read(4).decode('ASCII')
+        return version
+
+    def unsupportedVersionHelper(self, version: str):
+        if len(version) != 4:
+            return None
+        vsplit = version.split('.')
+        if len(vsplit) != 2:
+            return None
+        for i in vsplit:
+            if not i.isdigit():
+                return None
+        vMain, vSub = (int(i) for i in vsplit)
+        vscen = vMain * 65536 + vSub
+        vtool = AoE2DEScenario.LATEST_VERSION[0] * 65536 + AoE2DEScenario.LATEST_VERSION[1]
+        if vscen > vtool:
+            return 'Newer'
+        else:
+            return 'Early'
+
     def openScenario(self, path=None):
         if path == None:
             path = self.openedScenPath
@@ -839,11 +880,31 @@ class TCWindow():
             return
         scenFolder, scenName = os.path.split(path)
         scenStem, scenExt = os.path.splitext(scenName)
-        print(scenFolder, scenStem, scenExt)
+        # print(scenFolder, scenStem, scenExt)
+        scenVersion = self.readScenarioVersion(path)
+        if not CeAttributes.isSupportedVersion(scenVersion):
+            v = self.unsupportedVersionHelper(scenVersion)
+            if v == 'Newer':
+                messagebox.showerror(title=TEXT['titleOpenfailed'],
+                                    message=TEXT['messageOpenfailed'].format( \
+                                        TEXT['messageOpenfailedByNewerVersion'].format(scenVersion, DEFAULT_VERSION)))
+            elif v == 'Early':
+                messagebox.showerror(title=TEXT['titleOpenfailed'],
+                                    message=TEXT['messageOpenfailed'].format( \
+                                        TEXT['messageOpenfailedByEarlyVersion'].format(scenVersion, CeAttributes.getAllSupportVersion()[-1])))
+            else:
+                messagebox.showerror(title=TEXT['titleOpenfailed'],
+                                    message=TEXT['messageOpenfailed'].format( \
+                                        TEXT['messageOpenfailedByUnknownVersion'].format(scenVersion)))
+            return
         self.statusBarMessage(TEXT['noticeScenarioLoading'], update=True)
+        if self.activeScenario != None and scenVersion != self.activeScenario.scenario_version:
+            self.restartToLoad = path
+            self.root.destroy()
+            return
         try:
             self.logCatch = self.__catchScenLoadProgress
-            self.activeScenario:AoE2DEScenario = AoE2DEScenario.from_file(path)
+            self.activeScenario = AoE2DEScenario.from_file(path)
         except UnknownScenarioStructureError as e:
             def checkVersionNotSupportedRaise(e: UnknownScenarioStructureError):
                 """Catch ASP version not supported exception."""
@@ -853,18 +914,19 @@ class TCWindow():
                 if not parsed:
                     return False
                 strScenVer: str = parsed.fixed[1]
-                strToolVer = f'{AoE2DEScenario.LATEST_VERSION[0]}.{AoE2DEScenario.LATEST_VERSION[1]}'
-                vMain, vSub = ((int(i) if i.isdigit() else 0) for i in strScenVer.split('.'))
-                vscen = vMain * 65536 + vSub
-                vtool = AoE2DEScenario.LATEST_VERSION[0] * 65536 + AoE2DEScenario.LATEST_VERSION[1]
-                if vscen > vtool:
+                v = self.unsupportedVersionHelper(strScenVer)
+                if v == 'Newer':
                     messagebox.showerror(title=TEXT['titleOpenfailed'],
                                         message=TEXT['messageOpenfailed'].format( \
-                                            TEXT['messageOpenfailedByNewerVersion'].format(strScenVer, strToolVer)))
+                                            TEXT['messageOpenfailedByNewerVersion'].format(strScenVer, DEFAULT_VERSION)))
+                elif v == 'Early':
+                    messagebox.showerror(title=TEXT['titleOpenfailed'],
+                                        message=TEXT['messageOpenfailed'].format( \
+                                            TEXT['messageOpenfailedByEarlyVersion'].format(strScenVer, CeAttributes.getAllSupportVersion()[-1])))
                 else:
                     messagebox.showerror(title=TEXT['titleOpenfailed'],
                                         message=TEXT['messageOpenfailed'].format( \
-                                            TEXT['messageOpenfailedByEarlyVersion'].format(strScenVer, strToolVer)))
+                                            TEXT['messageOpenfailedByUnknownVersion'].format(strScenVer)))
                 return True
 
             if not checkVersionNotSupportedRaise(e):
@@ -891,8 +953,8 @@ class TCWindow():
                 messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
         except Exception as e:
             messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
-            raise e
         else:
+            CeAttributes.setVersion(self.activeScenario.scenario_version)
             self.windowTitleTail = scenName
             self.openedScenPath = path
             self.triggerManager = self.activeScenario.trigger_manager
@@ -940,16 +1002,5 @@ class TCWindow():
 
     # endregion Methods
 
-
-import argparse
-
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dark', help='Darkly mode', nargs='?', default=False)
-    args = parser.parse_args()
-    if args.dark != False:
-        theme = 'darkly'
-    else:
-        theme = 'litera'
-    window = TCWindow(theme)
-    window.mainloop()
+    print('can not start, use Launcher.py')

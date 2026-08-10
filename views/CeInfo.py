@@ -15,7 +15,7 @@ from Localization import TEXT
 from TriggerAbstract import *
 from Util import FilteredMappedCombobox, IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, Tooltip, ValueSelectButton, ZoomImageViewer
 from WidgetLayout import CONDITION_WIDGET_FORM, EFFECT_WIDGET_FORM
-from _prebuild.CeAttributes import CONDITION_ATTRIBUTES, EFFECT_ATTRIBUTES
+from CeAttributesManager import CeAttributes
 from views.UnitInfo import UnitConstSelectButton, UnitsSelectButton
 
 if TYPE_CHECKING:
@@ -113,11 +113,11 @@ class CeInfoView(ttk.Frame):
                     widgetPack.label.grid_forget()
                     widgetPack.grid_forget()
             if nodeType == 'effect':
-                attributesDict = EFFECT_ATTRIBUTES
+                attributesDict = CeAttributes.effect()
                 attrWidgetFormDict = EFFECT_WIDGET_FORM
                 ceType = Effect
             else:
-                attributesDict = CONDITION_ATTRIBUTES
+                attributesDict = CeAttributes.condition()
                 attrWidgetFormDict = CONDITION_WIDGET_FORM
                 ceType = Condition
             for attribute in attributesDict.get(effectTypeId, []):
@@ -715,7 +715,7 @@ class CeInfoView(ttk.Frame):
     def loadConditionAttributes(self, condition: Condition):
         abstract = abstractCondition(condition)
         self.wCType.variable.set(condition.condition_type)
-        for attribute in CONDITION_ATTRIBUTES.get(condition.condition_type, []):
+        for attribute in CeAttributes.condition().get(condition.condition_type, []):
             try:
                 match CONDITION_WIDGET_FORM[attribute][0]:
                     case 'null':
@@ -747,7 +747,7 @@ class CeInfoView(ttk.Frame):
     def loadEffectAttributes(self, effect: Effect):
         abstract = abstractEffect(effect)
         self.wEType.load(effect.effect_type)
-        for attribute in EFFECT_ATTRIBUTES.get(effect.effect_type, []):
+        for attribute in CeAttributes.effect().get(effect.effect_type, []):
             try:
                 match EFFECT_WIDGET_FORM[attribute][0]:
                     case 'null':

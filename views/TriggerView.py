@@ -16,7 +16,7 @@ from AoE2ScenarioParser.objects.support.trigger_ce_lock import TriggerCELock
 from Localization import TEXT
 from TriggerAbstract import *
 from Util import Tooltip, ValueSelectButton
-from _prebuild.CeAttributes import CONDITION_ATTRIBUTES, EFFECT_ATTRIBUTES
+from CeAttributesManager import CeAttributes
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -26,7 +26,7 @@ def copyEffect(effect: Effect, parent: Trigger):
     srcEffect = copy.deepcopy(effect)
     newEffect = trigger.new_effect.none()
     newEffect.effect_type = srcEffect.effect_type
-    for attribute in EFFECT_ATTRIBUTES.get(srcEffect.effect_type, []):
+    for attribute in CeAttributes.effect().get(srcEffect.effect_type, []):
         setattr(newEffect, attribute, getattr(srcEffect, attribute))
     return newEffect
 
@@ -35,7 +35,7 @@ def copyCondition(condition: Condition, parent: Trigger):
     srcCondition = copy.deepcopy(condition)
     newCondition = trigger.new_condition.none()
     newCondition.condition_type = srcCondition.condition_type
-    for attribute in CONDITION_ATTRIBUTES.get(srcCondition.condition_type, []):
+    for attribute in CeAttributes.condition().get(srcCondition.condition_type, []):
         setattr(newCondition, attribute, getattr(srcCondition, attribute))
     return newCondition
 

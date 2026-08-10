@@ -24,6 +24,19 @@ def updateVersionTxt(path: str, templatePath: str, verTuple: tuple[int, int, int
     with open(path, "w") as f:
         f.write(versionText)
 
+def updateSpecTxt(path: str, templatePath: str):
+    from prebuild import INCLUDING_VERSION
+    from AoE2ScenarioParser.scenarios.aoe2_de_scenario import AoE2DEScenario
+
+    LATEST_VERSION = '.'.join(map(str, AoE2DEScenario.LATEST_VERSION))
+
+    with open(templatePath, "r") as f:
+        specText = f.read()
+    specText = specText.replace("INCLUDING_VERSION = []", f"INCLUDING_VERSION = {INCLUDING_VERSION}", count=1)
+    specText = specText.replace("LATEST_VERSION = ''", f"LATEST_VERSION = '{LATEST_VERSION}'", count=1)
+    with open(path, "w") as f:
+        f.write(specText)
+
 def git_last_commit_hash(path):
     try:
         hash = subprocess.check_output([
@@ -76,8 +89,10 @@ if __name__ == '__main__':
     versionString, versionTuple = get_version(workDir)
     createVersionFile('_prebuild/version.py', versionTuple, versionString)
     updateVersionTxt('_prebuild/version.txt', 'version.txt', versionTuple, versionString)
+    updateSpecTxt('_main.spec', 'main.spec')
 
-    result = subprocess.run(f'{sys.executable} -m PyInstaller "{workDir}/main.spec" --distpath "{workDir}/release"', stdout=subprocess.PIPE, text=True)
+    result = subprocess.run(f'{sys.executable} -m PyInstaller "{workDir}/_main.spec" --distpath "{workDir}/release"', stdout=subprocess.PIPE, text=True)
+    os.remove('_main.spec')
 
     if result.returncode != 0:
         print(f'Pyinstaller fail at {result.returncode}')

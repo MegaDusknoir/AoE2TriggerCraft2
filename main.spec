@@ -3,25 +3,29 @@
 import importlib.util
 import os
 
+INCLUDING_VERSION = []
+LATEST_VERSION = ''
+
 def getPackagePath(package_name):
     spec = importlib.util.find_spec(package_name)
     if spec and spec.origin:
         package_dir = os.path.dirname(spec.origin)
         return package_dir
     else:
-        raise ImportError(f"未找到包 {package_name}")
+        raise ImportError(f"No module named {package_name}")
 
 package_path = getPackagePath("AoE2ScenarioParser")
 
-added_files = [
-         ( f'{package_path}/versions/DE/v1.58/conditions.json', './AoE2ScenarioParser/versions/DE/v1.58'), 
-         ( f'{package_path}/versions/DE/v1.58/effects.json', './AoE2ScenarioParser/versions/DE/v1.58'), 
-         ( f'{package_path}/versions/DE/v1.58/structure.json', './AoE2ScenarioParser/versions/DE/v1.58'), 
-         ( f'{package_path}/versions/DE/v1.58/default.aoe2scenario', './AoE2ScenarioParser/versions/DE/v1.58'), 
-         ]
+added_files = []
+for version in INCLUDING_VERSION:
+    added_files.append( (f'{package_path}/versions/DE/v{version}/conditions.json', f'./AoE2ScenarioParser/versions/DE/v{version}') )
+    added_files.append( (f'{package_path}/versions/DE/v{version}/effects.json', f'./AoE2ScenarioParser/versions/DE/v{version}') )
+    added_files.append( (f'{package_path}/versions/DE/v{version}/structure.json', f'./AoE2ScenarioParser/versions/DE/v{version}') )
+    if version == LATEST_VERSION:
+        added_files.append( (f'{package_path}/versions/DE/v{version}/default.aoe2scenario', f'./AoE2ScenarioParser/versions/DE/v{version}') )
 
 a = Analysis(
-    ['main.py'],
+    ['Launcher.py'],
     pathex=['.'],
     binaries=[],
     datas=added_files,

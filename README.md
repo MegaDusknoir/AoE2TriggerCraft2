@@ -43,7 +43,7 @@ python tools\datasetGeneratorGUI.pyw
 ### Start
 Run
 ```
-python main.py
+python Launcher.py
 ```
 
 ### Pack
