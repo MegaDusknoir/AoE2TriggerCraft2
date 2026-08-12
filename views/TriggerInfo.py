@@ -7,7 +7,7 @@ import ttkbootstrap as ttk
 from AoE2ScenarioParser.objects.data_objects.trigger import Trigger
 
 from Localization import TEXT
-from Util import ReCompiled, Tooltip, ValueSelectButton
+from Util import ReCompiled, Tooltip, ValueSelectButton, ScenarioVersion
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -50,7 +50,8 @@ class TriggerInfoView(ttk.Frame):
         cbTLoop.grid(column=0, row=3, sticky=W, padx=self.app.dpi(10), pady=self.app.dpi((10,0)))
         cbTExecuteOnLoad = ttk.Checkbutton(self, text=TEXT['btnTriggerExecuteOnLoad'], bootstyle=(ttk.ROUND, ttk.TOGGLE),
                                     variable=self.varTExecuteOnLoad, command=self.__setTriggerExecuteOnLoad)
-        cbTExecuteOnLoad.grid(column=0, row=4, sticky=W, padx=self.app.dpi(10), pady=self.app.dpi((10,0)))
+        if self.app.editorVersion >= ScenarioVersion('1.55'):
+            cbTExecuteOnLoad.grid(column=0, row=4, sticky=W, padx=self.app.dpi(10), pady=self.app.dpi((10,0)))
         lTDscrOrder = ttk.Label(self, text=TEXT['labelTriggerDescriptionOrder'])
         lTDscrOrder.grid(column=0, row=5, sticky=EW, padx=self.app.dpi(10), pady=self.app.dpi(10))
         eTDscrOrder = ttk.Entry(self, textvariable=self.varTDescriptionOrder, validate="key",
@@ -152,10 +153,11 @@ class TriggerInfoView(ttk.Frame):
         if self.tl.itemType(curItem) == 'trigger':
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
-            if self.varTExecuteOnLoad.get() == True:
-                trigger.execute_on_load = 1
-            else:
-                trigger.execute_on_load = 0
+            if self.app.editorVersion >= ScenarioVersion('1.55'):
+                if self.varTExecuteOnLoad.get() == True:
+                    trigger.execute_on_load = 1
+                else:
+                    trigger.execute_on_load = 0
 
     def __setTriggerAsObjective(self):
         curItem = self.tl.focus()
@@ -261,7 +263,8 @@ class TriggerInfoView(ttk.Frame):
         self.varTName.set(trigger.name)
         self.varTEnable.set(True if trigger.enabled == 1 else False)
         self.varTLoop.set(True if trigger.looping == 1 else False)
-        self.varTExecuteOnLoad.set(True if trigger.execute_on_load == 1 else False)
+        if self.app.editorVersion >= ScenarioVersion('1.55'):
+            self.varTExecuteOnLoad.set(True if trigger.execute_on_load == 1 else False)
         self.varTDescriptionOrder.set(trigger.description_order)
         self.varTDescriptionStringTable.set(trigger.description_stid)
         self.varTShortDescriptionStringTable.set(trigger.short_description_stid)

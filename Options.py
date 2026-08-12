@@ -5,6 +5,8 @@ import ttkbootstrap as ttk
 class GlobalOptions():
     def __init__(self, workDir: str):
         self._baseDir = workDir
+        self._configPath = f'{self._baseDir}/config.json'
+        self.language = ttk.StringVar(value="auto")
         self.enableOverwritingSource = ttk.BooleanVar(value=False)
         self.createBackupWhenOverwritingSource = ttk.BooleanVar(value=True)
 
@@ -15,19 +17,17 @@ class GlobalOptions():
         self.nameGaiaFix = ttk.StringVar(value="(GAIA)")
 
         self.addDuplicateMark = ttk.BooleanVar(value=False)
-        self.load(f'{self._baseDir}/config.json')
+        self.load(self._configPath)
 
     def load(self, file):
         jsonValid = False
-        if os.path.isfile(file):
+        try:
             with open(file, 'r') as f:
-                try:
-                    cfg = json.load(f)
-                except (json.decoder.JSONDecodeError, UnicodeDecodeError):
-                    cfg = {'GlobalOptions':{}}
-                else:
-                    if 'GlobalOptions' in cfg:
-                        jsonValid = True
+                cfg = json.load(f)
+                if 'GlobalOptions' in cfg:
+                    jsonValid = True
+        except (FileNotFoundError, PermissionError, json.decoder.JSONDecodeError, UnicodeDecodeError):
+            cfg = {'GlobalOptions':{}}
         if jsonValid:
             for attr in cfg['GlobalOptions']:
                 if hasattr(self, attr):
@@ -40,8 +40,16 @@ class GlobalOptions():
         dump = {'GlobalOptions': {}}
         for attr in attrs:
             dump['GlobalOptions'][attr] = getattr(self, attr).get()
-        with open(file, 'w') as f:
-            json.dump(dump, f, indent=4, ensure_ascii=False)
+        try:
+            with open(file, 'w') as f:
+                json.dump(dump, f, indent=4, ensure_ascii=False)
+        except PermissionError:
+            pass
+
+    def setOption(self, attr: str, value):
+        if hasattr(self, attr):
+            getattr(self, attr).set(value)
+            self.dump(self._configPath)
 
 class ScenarioOptions():
     def __init__(self):

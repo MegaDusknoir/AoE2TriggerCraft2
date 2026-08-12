@@ -48,7 +48,7 @@ from views.MapView import MapView
 from views.MetaView import MetaView
 from views.TriggerInfo import TriggerInfoView
 from views.CeInfo import CeInfoView
-from Util import DebugTimeCount
+from Util import DebugTimeCount, ScenarioVersion
 from _prebuild.version import VERSION_STRING
 from _prebuild.AoE2TC_icon import Icon
 from CeAttributesManager import CeAttributes
@@ -62,7 +62,7 @@ ASPSettings.ENABLE_XS_CHECK_INTEGRATION = False
 ASPSettings.ALLOW_OVERWRITING_SOURCE = True
 # ASPSettings.ALLOW_DIRTY_RETRIEVER_OVERWRITE = True
 
-DEFAULT_VERSION = '.'.join(map(str, AoE2DEScenario.LATEST_VERSION))
+DEFAULT_VERSION = ScenarioVersion(AoE2DEScenario.LATEST_VERSION)
 
 class CreateIcon():
     def __init__(self):
@@ -99,8 +99,15 @@ class TriggerJsonIO():
         'mute_objectives',
         'condition_order',
         'effect_order',
+        'execute_on_load',
         # 'conditions',
         # 'effects',
+    ]
+
+    effectTextAttributesSet = [
+        'message',
+        'message_option1',
+        'message_option2',
     ]
 
     class TriggerJsonNotRestorableError(Exception):
@@ -110,6 +117,11 @@ class TriggerJsonIO():
         pass
 
     @classmethod
+    def assignVersion(cls, version: ScenarioVersion):
+        if version < ScenarioVersion('1.55') and 'execute_on_load' in cls.triggerAttributesSet:
+            cls.triggerAttributesSet.remove('execute_on_load')
+
+    @classmethod
     def export(cls, tm: TriggerManager, begin:int=None, end:int=None) -> dict:
         if begin is None:
             begin = 0
@@ -117,9 +129,7 @@ class TriggerJsonIO():
             end = len(tm.triggers)
 
         exportTriggerOrder = tm.trigger_display_order[begin:end]
-        selectTriggersId: list[int] = []
-        for id in exportTriggerOrder:
-            selectTriggersId.append(id)
+        selectTriggersId = exportTriggerOrder.copy()
         selectTriggersId.sort()
         triggersList = []
         for i in selectTriggersId:
@@ -225,6 +235,64 @@ class TriggerJsonIO():
             trigger.effect_order = triggerDict['effect_order']
         tm.trigger_display_order = obj['trigger_display_order']
 
+    @classmethod
+    def textExport(cls, tm: TriggerManager) -> list:
+        triggersList = []
+        for t_display_id in range(len(tm.triggers)):
+            trigger = tm.triggers[tm.trigger_display_order[t_display_id]]
+            triggerDict = {}
+            if trigger.display_as_objective != 0:
+                triggerDict['description'] = getattr(trigger, 'description')
+            if trigger.display_on_screen != 0:
+                triggerDict['short_description'] = getattr(trigger, 'short_description')
+            effectsList = []
+            for e_display_id in range(len(trigger.effects)):
+                effect = trigger.effects[trigger.effect_order[e_display_id]]
+                effectDict = {}
+                for attr in cls.effectTextAttributesSet:
+                    if attr in CeAttributes.effect().get(effect.effect_type, []) \
+                        and effect.effect_type not in (55, 56, 81, 82, 83) \
+                        and getattr(effect, attr).strip() != '':
+                            effectDict[attr] = getattr(effect, attr)
+                if len(effectDict) != 0:
+                    effectsList.append({'effect_id': trigger.effect_order[e_display_id]} | effectDict)
+            if len(effectsList) != 0:
+                triggerDict['effects'] = effectsList
+            if len(triggerDict) != 0:
+                triggersList.append({'trigger_id': trigger.trigger_id, 'name': trigger.name} | triggerDict)
+        return triggersList
+
+    @classmethod
+    def textPreimportCheck(cls, tm: TriggerManager, obj: list[dict]) -> bool:
+        # expecting obj is validated
+        for tDict in obj:
+            if tDict['trigger_id'] >= len(tm.triggers):
+                return False
+            trigger: Trigger = tm.triggers[tDict['trigger_id']]
+            for effectDict in tDict.get('effects', []):
+                if effectDict['effect_id'] >= len(trigger.effects):
+                    return False
+                effect: Effect = trigger.effects[effectDict['effect_id']]
+                for attr in cls.effectTextAttributesSet:
+                    if attr in effectDict:
+                        if attr not in CeAttributes.effect().get(effect.effect_type, []):
+                            return False
+        return True
+
+    @classmethod
+    def textImport(cls, tm: TriggerManager, obj: list[dict]):
+        # expecting obj is validated
+        for tDict in obj:
+            trigger: Trigger = tm.triggers[tDict['trigger_id']]
+            for attr in ('description', 'short_description'):
+                if attr in tDict:
+                    setattr(trigger, attr, tDict[attr])
+            for effectDict in tDict.get('effects', []):
+                effect: Effect = trigger.effects[effectDict['effect_id']]
+                for attr in cls.effectTextAttributesSet:
+                    if attr in effectDict:
+                        setattr(effect, attr, effectDict[attr])
+
     schema = {
         "type": "object",
         "properties": {
@@ -304,13 +372,15 @@ class TCWindow():
         self.stdoutBack = sys.stdout
         sys.stdout = self.ioAgent
 
+        self.root = ttk.Window('', iconphoto=None)
+        self.options = GlobalOptions(workDir)
         try:
-            loadLocalizedText(workDir)
+            loadLocalizedText(workDir, self.options.language.get())
         except ResourcesFileError as e:
             messagebox.showerror('File Error', 'The application can not startup due to:\n\n{0}'.format(e.args[0]), icon='error')
             sys.exit()
 
-        self.root = ttk.Window(TEXT['titleMainWindow'], iconphoto=None)
+        self.root.title(TEXT['titleMainWindow'])
         self.root.geometry(f'{self.dpi(1280)}x{self.dpi(720)}')
         self.root.protocol('WM_DELETE_WINDOW', self.windowClose)
         self.theme = theme
@@ -320,6 +390,14 @@ class TCWindow():
             self.initialOpen = ''
         self.activeScenario: AoE2DEScenario = None
         self.restartToLoad = None
+        if self.initialOpen == '':
+            self.editorVersion = DEFAULT_VERSION
+        else:
+            try:
+                self.editorVersion = ScenarioVersion(self.readScenarioVersion(self.initialOpen))
+            except:
+                self.editorVersion = DEFAULT_VERSION
+
         self.style = ttk.Style()
         self.style.theme_use(self.theme)
         if self.theme in ('darkly'):
@@ -329,7 +407,6 @@ class TCWindow():
 
         self.__loadImages()
 
-        self.options = GlobalOptions(workDir)
         self.wndLog = None
         self.__createMainWindow()
 
@@ -357,6 +434,10 @@ class TCWindow():
         else:
             self.openScenario(self.initialOpen)
             if self.activeScenario == None:
+                if DEFAULT_VERSION != self.editorVersion:
+                    self.restartToLoad = ''
+                    self.root.destroy()
+                    raise self.LoadingDifferentVersionException(self.restartToLoad)
                 self.generateDefaultScenario()
         with CreateIcon() as iconPath:
             self.imgAbout = self.__loadImage(iconPath, self.dpi((128, 128)))
@@ -366,7 +447,7 @@ class TCWindow():
             raise self.LoadingDifferentVersionException(self.restartToLoad)
 
     def generateDefaultScenario(self):
-        if self.activeScenario != None and DEFAULT_VERSION != self.activeScenario.scenario_version:
+        if DEFAULT_VERSION != self.editorVersion:
             self.restartToLoad = ''
             self.root.destroy()
             return
@@ -375,6 +456,7 @@ class TCWindow():
         ASPSettings.PRINT_STATUS_UPDATES = True
         print('Loaded default scenario')
         CeAttributes.setVersion(self.activeScenario.scenario_version)
+        TriggerJsonIO.assignVersion(self.editorVersion)
         self.openedScenPath = ''
         self.windowTitleTail = "default"
         self.triggerManager: TriggerManager = self.activeScenario.trigger_manager
@@ -424,8 +506,8 @@ class TCWindow():
         self.style.configure('ceWindowWidgetButton.success.Outline.TButton',)
 
         self.main = ttk.Frame(self.root, padding=self.dpi((10,10,10,5)))
-        self.__createPanedWindow()
         self.__createStatusBar()
+        self.__createPanedWindow()
         self.__createMenu()
         self.__bindGlobalKeys()
 
@@ -539,8 +621,8 @@ class TCWindow():
         self.menuEdit.add_command(label=TEXT['menuExportTriggerToText'], command=self.exportSelTriggerToText)
         self.menuEdit.add_command(label=TEXT['menuImportTriggerFromText'], command=self.addTriggerFromText)
         self.menuEdit.add_separator()
-        self.menuEdit.add_command(label=TEXT['menuExportAllText'], command=lambda: print('ExportAllText'), state='disabled')
-        self.menuEdit.add_command(label=TEXT['menuImportText'], command=lambda: print('ImportText'), state='disabled')
+        self.menuEdit.add_command(label=TEXT['menuExportAllText'], command=self.exportAllText)
+        self.menuEdit.add_command(label=TEXT['menuImportText'], command=self.importText)
         self.menuLanguage = ttk.Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuLanguage'], menu=self.menuLanguage)
         for language in LOCALIZATION_DEFINES:
@@ -596,6 +678,7 @@ class TCWindow():
         """Change language setting and apply"""
         try:
             loadLocalizedText(workDir, lang)
+            self.options.setOption('language', lang)
         except ResourcesFileError as e:
             messagebox.showerror('File Error', 'Fail to change language due to:\n\n{0}'.format(e.args[0]), icon='error')
         else:
@@ -764,6 +847,169 @@ class TCWindow():
                 self.fTEditor.loadTrigger()
                 self.statusBarMessage(TEXT['noticeTriggerJsonAdded'])
 
+    def exportAllText(self):
+        if not self.openedScenPath:
+            initialFile = 'default.json'
+        else:
+            scenFolder, scenName = os.path.split(self.openedScenPath)
+            scenStem, scenExt = os.path.splitext(scenName)
+            initialFile = scenStem + '.json'
+        initialFile = 'text_' + initialFile
+        saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveTextJson'],
+                                         initialfile=initialFile,
+                                         filetypes=[('JSON', '*.json')])
+        if not saveFilePath:
+            return
+        _, fileExt = os.path.splitext(saveFilePath)
+        if not fileExt and not os.path.isfile(saveFilePath):
+            saveFilePath += '.json'
+
+        tTrigger = TriggerJsonIO.textExport(self.triggerManager)
+        tPName = []
+        for p in range(1, self.activeScenario.player_manager.active_players + 1):
+            tPName.append(self.activeScenario.player_manager.players[p].tribe_name)
+        tMsgs = {}
+        for m in TEXT['messageNames'].keys():
+            tMsgs[m] = getattr(self.activeScenario.message_manager, m)
+        tDump = {'messages': tMsgs, 'players': tPName, 'triggers': tTrigger}
+        try:
+            with open(saveFilePath, 'w', encoding='utf-8') as fp:
+                json.dump(tDump, fp, indent=4, ensure_ascii=False)
+        except Exception as e:
+            messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+        else:
+            self.statusBarMessage(TEXT['noticeTextJsonSaved'])
+
+    def importText(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "object",
+                    "properties": {
+                        "instructions": {
+                            "type": "string"
+                        },
+                        "hints": {
+                            "type": "string"
+                        },
+                        "scouts": {
+                            "type": "string"
+                        },
+                        "victory": {
+                            "type": "string"
+                        },
+                        "loss": {
+                            "type": "string"
+                        },
+                        "history": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "instructions",
+                        "hints",
+                        "scouts",
+                        "victory",
+                        "loss",
+                        "history"
+                    ],
+                    "additionalProperties": False
+                },
+                "players": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 8
+                },
+                "triggers": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "trigger_id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "description": {
+                                "type": "string"
+                            },
+                            "short_description": {
+                                "type": "string"
+                            },
+                            "effects": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "effect_id": {
+                                            "type": "integer"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "message_option1": {
+                                            "type": "string"
+                                        },
+                                        "message_option2": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "effect_id"
+                                    ],
+                                    "additionalProperties": False
+                                }
+                            }
+                        },
+                        "required": [
+                            "trigger_id"
+                        ],
+                        "additionalProperties": False
+                    }
+                }
+            },
+            "required": [
+                "messages",
+                "players",
+                "triggers"
+            ],
+            "additionalProperties": False
+        }
+
+        openFilePath = askopenfilename(title=TEXT['titleSelectTextJson'],
+                                       filetypes=[('JSON', '*.json'), (TEXT['typeNameAll'], '*')])
+        textDump = None
+        if openFilePath == '':
+            return
+        with open(openFilePath, 'r', encoding='utf-8') as f:
+            try:
+                textDump = json.load(f)
+            except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
+            except Exception as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+        if textDump:
+            try:
+                jsonschema.validate(textDump, schema)
+            except jsonschema.ValidationError as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
+            else:
+                if not TriggerJsonIO.textPreimportCheck(self.triggerManager, textDump['triggers']):
+                    messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageTextJsonNotMatchError'])
+                    return
+                for k, v in textDump['messages'].items():
+                    setattr(self.activeScenario.message_manager, k, v)
+                for i, name in enumerate(textDump['players']):
+                    self.activeScenario.player_manager.players[i + 1].tribe_name = name
+                TriggerJsonIO.textImport(self.triggerManager, textDump['triggers'])
+                self.fTEditor.loadTrigger()
+                self.statusBarMessage(TEXT['noticeTextJsonImported'])
+
     def itemSelect(self, event):
         curItem = self.fTEditor.tvTriggerList.focus()
         nodeType = self.fTEditor.tvTriggerList.itemType(curItem)
@@ -856,19 +1102,12 @@ class TCWindow():
             version = f.read(4).decode('ASCII')
         return version
 
-    def unsupportedVersionHelper(self, version: str):
-        if len(version) != 4:
+    def unsupportedVersionHelper(self, versionStr: str):
+        try:
+            version = ScenarioVersion(versionStr)
+        except ValueError:
             return None
-        vsplit = version.split('.')
-        if len(vsplit) != 2:
-            return None
-        for i in vsplit:
-            if not i.isdigit():
-                return None
-        vMain, vSub = (int(i) for i in vsplit)
-        vscen = vMain * 65536 + vSub
-        vtool = AoE2DEScenario.LATEST_VERSION[0] * 65536 + AoE2DEScenario.LATEST_VERSION[1]
-        if vscen > vtool:
+        if version > DEFAULT_VERSION:
             return 'Newer'
         else:
             return 'Early'
@@ -881,7 +1120,11 @@ class TCWindow():
         scenFolder, scenName = os.path.split(path)
         scenStem, scenExt = os.path.splitext(scenName)
         # print(scenFolder, scenStem, scenExt)
-        scenVersion = self.readScenarioVersion(path)
+        try:
+            scenVersion = self.readScenarioVersion(path)
+        except (FileNotFoundError, PermissionError) as e:
+            messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
+            return
         if not CeAttributes.isSupportedVersion(scenVersion):
             v = self.unsupportedVersionHelper(scenVersion)
             if v == 'Newer':
@@ -891,12 +1134,13 @@ class TCWindow():
             elif v == 'Early':
                 messagebox.showerror(title=TEXT['titleOpenfailed'],
                                     message=TEXT['messageOpenfailed'].format( \
-                                        TEXT['messageOpenfailedByEarlyVersion'].format(scenVersion, CeAttributes.getAllSupportVersion()[-1])))
+                                        TEXT['messageOpenfailedByEarlyVersion'].format(scenVersion)))
             else:
                 messagebox.showerror(title=TEXT['titleOpenfailed'],
                                     message=TEXT['messageOpenfailed'].format( \
-                                        TEXT['messageOpenfailedByUnknownVersion'].format(scenVersion)))
+                                        TEXT['messageOpenfailedByUnknownVersion'].format(repr(scenVersion))))
             return
+        self.statusBarMessage('', layer='top')
         self.statusBarMessage(TEXT['noticeScenarioLoading'], update=True)
         if self.activeScenario != None and scenVersion != self.activeScenario.scenario_version:
             self.restartToLoad = path
@@ -922,7 +1166,7 @@ class TCWindow():
                 elif v == 'Early':
                     messagebox.showerror(title=TEXT['titleOpenfailed'],
                                         message=TEXT['messageOpenfailed'].format( \
-                                            TEXT['messageOpenfailedByEarlyVersion'].format(strScenVer, CeAttributes.getAllSupportVersion()[-1])))
+                                            TEXT['messageOpenfailedByEarlyVersion'].format(strScenVer)))
                 else:
                     messagebox.showerror(title=TEXT['titleOpenfailed'],
                                         message=TEXT['messageOpenfailed'].format( \
@@ -954,7 +1198,9 @@ class TCWindow():
         except Exception as e:
             messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
         else:
-            CeAttributes.setVersion(self.activeScenario.scenario_version)
+            self.editorVersion = ScenarioVersion(self.activeScenario.scenario_version)
+            CeAttributes.setVersion(self.editorVersion)
+            TriggerJsonIO.assignVersion(self.editorVersion)
             self.windowTitleTail = scenName
             self.openedScenPath = path
             self.triggerManager = self.activeScenario.trigger_manager

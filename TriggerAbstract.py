@@ -339,15 +339,15 @@ def abstractCondition(condition: Condition) -> str:
                         triggerName = '<-1>'
                     return formatString.format(triggerName)
                 case _:
-                    return CONDITION_NAME[condition.condition_type]
+                    return getConditionName(condition.condition_type)
         except UnsupportedAttributeError as e:
             print(f"Unsupported attribute: {e}")
-            return CONDITION_NAME[condition.condition_type]
+            return getConditionName(condition.condition_type)
         except TypeError as e:
             print(f"Python TypeError at {condition.condition_type}: {e}")
-            return CONDITION_NAME[condition.condition_type]
+            return getConditionName(condition.condition_type)
     else:
-        return CONDITION_NAME[condition.condition_type]
+        return getConditionName(condition.condition_type)
 
 def abstractEffect(effect: Effect) -> str:
     typeKey = effect.effect_type
@@ -949,12 +949,12 @@ def abstractEffect(effect: Effect) -> str:
                                                                         effect.area_x2, effect.area_y2,
                                                                         allowAreaEmpty=True))
                 case _:
-                    return EFFECT_NAME[effect.effect_type]
+                    return getEffectName(effect.effect_type)
         except UnsupportedAttributeError as e:
             print(f"Unsupported attribute: {e}")
-            return EFFECT_NAME[effect.effect_type]
+            return getEffectName(effect.effect_type)
         except TypeError as e:
             print(f"Python TypeError at {effect.effect_type}: {e}")
-            return EFFECT_NAME[effect.effect_type]
+            return getEffectName(effect.effect_type)
     else:
-        return EFFECT_NAME[effect.effect_type]
+        return getEffectName(effect.effect_type)

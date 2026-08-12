@@ -9,6 +9,52 @@ import tkinter as tk
 import PIL.Image
 import PIL.ImageTk
 
+class ScenarioVersion:
+    def __init__(self, version: tuple[int, int] | str):
+        if isinstance(version, tuple):
+            if len(version) != 2 or not all(isinstance(x, int) for x in version):
+                raise ValueError('Invalid version tuple.')
+            self._version = version
+            self._version_str = '.'.join(map(str, self._version))
+        elif isinstance(version, str):
+            parts = version.split('.')
+            if len(parts) != 2 or not all(x.isdigit() for x in parts):
+                raise ValueError('Invalid version string.')
+            self._version = tuple(map(int, parts))
+            self._version_str = version
+        else:
+            raise ValueError('Version shall be a tuple or str.')
+
+    def _toInt(self):
+        return self._version[0] * 65536 + self._version[1]
+
+    def toTuple(self):
+        return self._version
+
+    def __str__(self):
+        return self._version_str
+
+    def __format__(self, format_spec):
+        return self._version_str
+
+    def __eq__(self, other):
+        return self._toInt() == other
+
+    def __ne__(self, other):
+        return self._toInt() != other
+
+    def __lt__(self, other):
+        return self._toInt() < other
+
+    def __gt__(self, other):
+        return self._toInt() > other
+
+    def __le__(self, other):
+        return self._toInt() <= other
+
+    def __ge__(self, other):
+        return self._toInt() >= other
+
 class ResourcesFileError(Exception):
     pass
 

@@ -10,7 +10,7 @@ from AoE2ScenarioParser.objects.data_objects.unit import Unit
 
 from Localization import TEXT, UNIT_NAME
 from TriggerAbstract import getUnitListName, getUnitsAbstract
-from Util import IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, ReCompiled, Tooltip, ValueSelectButton
+from Util import IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, ReCompiled, ScenarioVersion, Tooltip, ValueSelectButton
 from views.UnitView import UnitKey
 
 if TYPE_CHECKING:
@@ -99,13 +99,15 @@ class UnitInfoView(ttk.Frame):
         #region Column 3
         """caption_string_id"""
         lUCaptionID = ttk.Label(self, text=TEXT['labelUnitCaptionStringID'])
-        lUCaptionID.grid(column=3, row=0, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
         self.eUCaptionID = self.__IntAttributeEntry(self.app, self, 'caption_string_id')
-        self.eUCaptionID.grid(column=3, row=1, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+        if self.app.editorVersion >= ScenarioVersion('1.54'):
+            lUCaptionID.grid(column=3, row=0, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+            self.eUCaptionID.grid(column=3, row=1, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
         lUCaption = ttk.Label(self, text=TEXT['labelUnitCaption'])
-        lUCaption.grid(column=3, row=2, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
         self.eUCaption = self.__StringAttributeEntry(self.app, self, 'caption_string')
-        self.eUCaption.grid(column=3, row=3, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+        if self.app.editorVersion >= ScenarioVersion('1.55'):
+            lUCaption.grid(column=3, row=2, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+            self.eUCaption.grid(column=3, row=3, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
         #endregion Column 3
 
         self.grid_columnconfigure(0,weight=1)
@@ -232,8 +234,10 @@ class UnitInfoView(ttk.Frame):
         self.eUInitFrame.variable.set(unit.initial_animation_frame)
         self.eUStatus.variable.set(unit.status)
         self.eURefId.variable.set(unit.reference_id)
-        self.eUCaptionID.variable.set(unit.caption_string_id)
-        self.eUCaption.variable.set(unit.caption_string)
+        if self.app.editorVersion >= ScenarioVersion('1.54'):
+            self.eUCaptionID.variable.set(unit.caption_string_id)
+        if self.app.editorVersion >= ScenarioVersion('1.55'):
+            self.eUCaption.variable.set(unit.caption_string)
 
 class UnitsSelectButton(ttk.Frame):
     def __init__(self, outer: 'TCWindow', master, multiple: bool,

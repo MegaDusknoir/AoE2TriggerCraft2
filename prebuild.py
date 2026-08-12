@@ -3,7 +3,7 @@ import importlib.util
 import json
 import os
 
-INCLUDING_VERSION = ['1.58', '1.57', '1.56', '1.55', '1.54']
+INCLUDING_VERSION = ['1.58', '1.57', '1.56', '1.55', '1.54', '1.53', '1.51', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.37', '1.36']
 
 def createDummyVersion(path):
     with open(path, "w") as f:

@@ -126,8 +126,10 @@ class DatasetGeneratorWindow():
             for key, check in self.checks.items():
                 if check[1].get():
                     langPath = f'{rootPath}/resources/{check[0]}/strings/key-value/key-value-strings-utf8.txt'
+                    langPath_paphos = f'{rootPath}/resources/{check[0]}/strings/key-value/key-value-paphos-strings-utf8.txt'
                     destPath = f'{self.dstPath}/{key}'
                     langDict = gen.parseLanguageText(langPath)
+                    langDict.update(gen.parseLanguageText(langPath_paphos))
                     unitName = gen.getUnitConstInfo(dataObj, langDict)
                     techName = gen.getTechName(dataObj, langDict)
                     tributeName = gen.getTributeName(dataObj, langDict)
