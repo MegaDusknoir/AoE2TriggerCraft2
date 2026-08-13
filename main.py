@@ -51,6 +51,7 @@ from views.CeInfo import CeInfoView
 from Util import DebugTimeCount, ScenarioVersion
 from _prebuild.version import VERSION_STRING
 from _prebuild.AoE2TC_icon import Icon
+from _prebuild.OptionsDefine import OPTIONS_DEFINE
 from CeAttributesManager import CeAttributes
 
 if getattr(sys, 'frozen', False): # True if PyInstaller packed
@@ -504,6 +505,7 @@ class TCWindow():
         self.style.configure('selectionButton.Link.TButton', shiftrelief=1, padding=(2,2,1,1), width=5, background=self.style.colors.active)
         self.style.configure('ceWidgetButton.Outline.TButton',)
         self.style.configure('ceWindowWidgetButton.success.Outline.TButton',)
+        self.style.configure('cbWithDescription.TCheckbutton', font=(defaultFont.cget('family'), 8))
 
         self.main = ttk.Frame(self.root, padding=self.dpi((10,10,10,5)))
         self.__createStatusBar()
@@ -609,6 +611,8 @@ class TCWindow():
         self.menuFile.add_command(label=TEXT['menuReload'], accelerator='Ctrl+R', command=self.openScenario)
         self.menuFile.add_command(label=TEXT['menuSave'], accelerator='Ctrl+S', command=self.saveScenario)
         self.menuFile.entryconfig(TEXT['menuSave'], state='normal' if self.options.enableOverwritingSource.get() else 'disabled')
+        self.options.enableOverwritingSource.trace_add('write', lambda *_: \
+            self.menuFile.entryconfig(TEXT['menuSave'], state='normal' if self.options.enableOverwritingSource.get() else 'disabled'))
         self.menuFile.add_command(label=TEXT['menuSaveAs'], accelerator='Ctrl+Shift+S', command=self.saveAsScenario)
         self.menuFile.add_command(label=TEXT['menuClose'], command=self.closeScenario)
         self.menuFile.add_separator()
@@ -623,6 +627,8 @@ class TCWindow():
         self.menuEdit.add_separator()
         self.menuEdit.add_command(label=TEXT['menuExportAllText'], command=self.exportAllText)
         self.menuEdit.add_command(label=TEXT['menuImportText'], command=self.importText)
+        self.menuEdit.add_separator()
+        self.menuEdit.add_command(label=TEXT['menuPreferences'], command=self.__modifyPreferences)
         self.menuLanguage = ttk.Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuLanguage'], menu=self.menuLanguage)
         for language in LOCALIZATION_DEFINES:
@@ -635,6 +641,63 @@ class TCWindow():
         self.menuAbout.add_command(label=TEXT['menuAbout'], command=self.__showAbout)
 
         self.root.config(menu=self.menuRoot)
+
+    def __modifyPreferences(self):
+        def on_confirm():
+            for option in self.varPreferences:
+                getattr(self.options, option).set(self.varPreferences[option].get())
+            self.options.saveAll()
+            _close_dialog(wndPref)
+
+        def _close_dialog(dialog: ttk.Toplevel):
+            dialog.grab_release()
+            dialog.destroy()
+            del self.varPreferences
+
+        wndPref = ttk.Toplevel(TEXT['titlePreferences'], master=self.main)
+        wndPref.withdraw()
+        wndPref.grab_set()
+        wndPref.protocol("WM_DELETE_WINDOW", lambda: _close_dialog(wndPref))
+
+        fSettings = ttk.Frame(wndPref)
+        self.varPreferences = {}
+        for option, args in OPTIONS_DEFINE.items():
+            if args['showInPreferences']:
+                VType = type(getattr(self.options, option))
+                self.varPreferences[option] = VType(value=getattr(self.options, option).get())
+                fOption = ttk.Frame(fSettings)
+                match args['type']:
+                    case 'string' | 'integer' | 'float':
+                        lDescription = ttk.Label(fOption, text=TEXT['descPreferences'][option],
+                                                 font=(tkfont.nametofont('TkDefaultFont').cget('family'), 8))
+                        lDescription.pack(side=TOP, anchor=W)
+                        wOption = ttk.Entry(fOption, textvariable=self.varPreferences[option])
+                        wOption.pack(side=TOP, anchor=W)
+                    case 'boolean':
+                        wOption = ttk.Checkbutton(fOption, text=TEXT['descPreferences'][option], variable=self.varPreferences[option],
+                                                  style='cbWithDescription.TCheckbutton')
+                        wOption.pack(side=TOP, anchor=W)
+                    case _:
+                        continue
+                lOption = ttk.Label(fSettings, text=TEXT['namePreferences'][option])
+                lOption.grid(column=args['grid'][0], row=args['grid'][1]*2, columnspan=args['columnSpan'], sticky=W,
+                             pady=self.dpi((0,4)))
+                fOption.grid(column=args['grid'][0], row=args['grid'][1]*2+1, columnspan=args['columnSpan'], sticky=W,
+                             padx=self.dpi((10,0)), pady=self.dpi((0,14)))
+        fSettings.pack(padx=self.dpi(10), pady=self.dpi(10), fill=X)
+
+        fConfirmCancel = ttk.Frame(wndPref)
+        ttk.Button(fConfirmCancel, text=TEXT['btnConfirm'], command=on_confirm) \
+            .pack(side=LEFT, fill=X, expand=YES, padx=self.dpi(40))
+        ttk.Button(fConfirmCancel, text=TEXT['btnCancel'], bootstyle=ttk.SECONDARY, command=lambda: _close_dialog(wndPref)) \
+            .pack(side=LEFT, fill=X, expand=YES, padx=self.dpi(40))
+        fConfirmCancel.pack(side=BOTTOM, fill=X, pady=self.dpi((0,10)))
+
+        wndPref.update_idletasks()
+        self.centerWindowGeometry(wndPref, wndPref.winfo_width(), wndPref.winfo_height(), 0.4)
+        wndPref.resizable(False, False)
+        wndPref.deiconify()
+        wndPref.transient(self.main)
 
     def __createStatusBar(self):
         self.fStatusBar = ttk.Frame(self.main)
@@ -650,8 +713,8 @@ class TCWindow():
         self.root.bind_all("<Control-O>", lambda e: self.openScenarioAskFile())
         self.root.bind_all("<Control-r>", lambda e: self.openScenario())
         self.root.bind_all("<Control-R>", lambda e: self.openScenario())
-        self.root.bind_all("<Control-s>", lambda e: self.saveScenario())
-        self.root.bind_all("<Control-S>", lambda e: self.saveScenario())
+        self.root.bind_all("<Control-s>", lambda e: self.saveScenario() if self.options.enableOverwritingSource.get() else None)
+        self.root.bind_all("<Control-S>", lambda e: self.saveScenario() if self.options.enableOverwritingSource.get() else None)
         self.root.bind_all("<Control-Shift-s>", lambda e: self.saveAsScenario())
         self.root.bind_all("<Control-Shift-S>", lambda e: self.saveAsScenario())
 

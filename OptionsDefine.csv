@@ -1,0 +1,10 @@
+Option,Type,Default,ShowInPreferences,Grid,ColumnSpan
+language,string,auto,False,"0,0",1
+enableOverwritingSource,boolean,False,True,"0,0",1
+createBackupWhenOverwritingSource,boolean,True,False,"0,1",1
+includeSource,boolean,True,True,"0,3",1
+includeTarget,boolean,True,True,"0,4",1
+changeFromPlayerOnly,boolean,True,True,"0,5",1
+nameFixFormat,string,(p{0}),True,"0,6",1
+nameGaiaFix,string,"(GAIA)",True,"0,7",1
+addDuplicateMark,boolean,False,True,"0,8",1

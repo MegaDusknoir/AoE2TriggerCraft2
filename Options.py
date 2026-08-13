@@ -1,28 +1,34 @@
 import json
 import os
 import ttkbootstrap as ttk
+from _prebuild.OptionsDefine import OPTIONS_DEFINE
 
 class GlobalOptions():
     def __init__(self, workDir: str):
         self._baseDir = workDir
         self._configPath = f'{self._baseDir}/config.json'
-        self.language = ttk.StringVar(value="auto")
-        self.enableOverwritingSource = ttk.BooleanVar(value=False)
-        self.createBackupWhenOverwritingSource = ttk.BooleanVar(value=True)
-
-        self.includeSource = ttk.BooleanVar(value=True)
-        self.includeTarget = ttk.BooleanVar(value=True)
-        self.changeFromPlayerOnly = ttk.BooleanVar(value=True)
-        self.nameFixFormat = ttk.StringVar(value="(p{0})")
-        self.nameGaiaFix = ttk.StringVar(value="(GAIA)")
-
-        self.addDuplicateMark = ttk.BooleanVar(value=False)
+        for option, args in OPTIONS_DEFINE.items():
+            match args['type']:
+                case 'string':
+                    optionType = ttk.StringVar
+                case 'boolean':
+                    optionType = ttk.BooleanVar
+                case 'integer':
+                    optionType = ttk.IntVar
+                case 'float':
+                    optionType = ttk.DoubleVar
+                case _:
+                    optionType = ttk.Variable
+            setattr(self, option, optionType(value=args['default']))
         self.load(self._configPath)
+
+    def saveAll(self):
+        self.dump(self._configPath)
 
     def load(self, file):
         jsonValid = False
         try:
-            with open(file, 'r') as f:
+            with open(file, 'r', encoding='utf-8') as f:
                 cfg = json.load(f)
                 if 'GlobalOptions' in cfg:
                     jsonValid = True
@@ -36,12 +42,11 @@ class GlobalOptions():
             self.dump(file)
 
     def dump(self, file):
-        attrs = [member for member in dir(self) if not callable(getattr(self, member)) and not member.startswith("_")]
         dump = {'GlobalOptions': {}}
-        for attr in attrs:
+        for attr in OPTIONS_DEFINE.keys():
             dump['GlobalOptions'][attr] = getattr(self, attr).get()
         try:
-            with open(file, 'w') as f:
+            with open(file, 'w', encoding='utf-8') as f:
                 json.dump(dump, f, indent=4, ensure_ascii=False)
         except PermissionError:
             pass

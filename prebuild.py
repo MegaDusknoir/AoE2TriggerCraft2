@@ -1,7 +1,9 @@
+import ast
 import base64
 import importlib.util
 import json
 import os
+import csv
 
 INCLUDING_VERSION = ['1.58', '1.57', '1.56', '1.55', '1.54', '1.53', '1.51', '1.49', '1.48', '1.47', '1.46', '1.45', '1.44', '1.43', '1.42', '1.41', '1.40', '1.37', '1.36']
 
@@ -66,6 +68,32 @@ def createCeAttributeDict(outPath):
         f.write('EFFECT_ATTRIBUTES_ALL_VERSION = ' + str(effectAttributesAllVersion) + '\n')
         f.write('CONDITION_ATTRIBUTES_ALL_VERSION = ' + str(conditionAttributesAllVersion) + '\n')
 
+def createOptionsDefine(csvPath, outPath):
+    with open(csvPath, newline='', encoding='utf-8') as csvfile:
+        csv_reader = csv.DictReader(csvfile)
+        options = {}
+        for row in csv_reader:
+            option = row['Option']
+            option_type = row['Type']
+            match option_type:
+                case 'boolean':
+                    option_default = ast.literal_eval(row['Default'])
+                case 'string':
+                    option_default = str(row['Default'])
+                case 'integer':
+                    option_default = int(row['Default'])
+                case 'float':
+                    option_default = float(row['Default'])
+            options[option] = {'type': option_type,
+                               'default': option_default,
+                               'showInPreferences': ast.literal_eval(row['ShowInPreferences']),
+                               'grid': ast.literal_eval(row['Grid']),
+                               'columnSpan': int(row['ColumnSpan'])
+                               }
+
+    with open(outPath, 'w', encoding='utf-8') as f:
+        f.write('OPTIONS_DEFINE = ' + str(options) + '\n')
+
 if __name__ == '__main__':
     workDir = os.path.dirname(__file__)
 
@@ -77,4 +105,6 @@ if __name__ == '__main__':
     print('Created ' + '_prebuild/AoE2TC_icon.py')
     createCeAttributeDict(outPath=f'{workDir}/_prebuild/CeAttributes.py')
     print('Created ' + '_prebuild/CeAttributes.py')
+    createOptionsDefine(csvPath='OptionsDefine.csv', outPath=f'{workDir}/_prebuild/OptionsDefine.py')
+    print('Created ' + '_prebuild/OptionsDefine.py')
     print('prebuild done.')

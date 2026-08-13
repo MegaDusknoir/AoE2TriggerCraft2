@@ -39,7 +39,11 @@ class LanguageDict(dict):
         'dataUnitFaceToName',
         'datasetColorMood',
         'datasetTimeUnit',
-        'datasetObjectAttribute'
+        'datasetObjectAttribute',
+        'datasetLocalTechnology',
+        'datasetObjectModifyAttributeState',
+        'namePreferences',
+        'descPreferences'
     ]
 
 TEXT = LanguageDict()
