@@ -24,7 +24,9 @@
         "changeFromPlayerOnly": "仅转换对应玩家",
         "nameFixFormat": "名称后缀格式",
         "nameGaiaFix": "名称后缀（盖亚）",
-        "addDuplicateMark": "添加复制标记"
+        "addDuplicateMark": "添加复制标记",
+        "useUnitDuplicateMappings": "使用单位映射表",
+        "useTileAreaDuplicateMappings": "使用区域映射表"
     },
     "descPreferences": {
         "enableOverwritingSource": "允许通过保存 (Ctrl+S) 来覆盖原始场景，请确保已做好备份。",
@@ -34,7 +36,9 @@
         "changeFromPlayerOnly": "复制时，仅对原型玩家进行转换。",
         "nameFixFormat": "复制触发时添加的后缀，使用 {0} 代表玩家序数。",
         "nameGaiaFix": "复制触发时添加的后缀（盖亚）。",
-        "addDuplicateMark": "在原型触发和复制触发的触发描述中添加标记。"
+        "addDuplicateMark": "在原型触发和复制触发的触发描述中添加标记。",
+        "useUnitDuplicateMappings": "复制时自动将指定的单位映射到对应的单位。",
+        "useTileAreaDuplicateMappings": "复制时自动将指定的区域映射到对应的区域。"
     },
     "menuLanguage": "语言",
     "menuHelp": "帮助",
@@ -44,8 +48,11 @@
     "menuDuplicateIncludeSource": "转换起始玩家",
     "menuDuplicateIncludeTarget": "转换目标玩家",
     "menuDuplicateIncludeStrict": "仅转换对应玩家",
+    "menuDuplicateUseUnitDuplicateMappings": "使用单位映射表",
+    "menuDuplicateUseTileAreaDuplicateMappings": "使用区域映射表",
     "menuDuplicateAddDuplicateMark": "复制时添加标记",
     "menuDuplicateDuplicateAllMarked": "复制已标记的原始触发...",
+    "menuDuplicateLoadDuplicateMappings": "载入复制映射表...",
     "menuDuplicateAdvanced": "高级...",
     "menuDeduplicateAllMarked": "移除已标记的衍生触发...",
     "menuDeduplicateAdvanced": "高级...",
@@ -84,6 +91,7 @@
     "messageAskSaveScenario": "是否要保存当前场景？",
     "titleSelectTriggerJson": "打开",
     "titleSelectSaveTriggerJson": "打开",
+    "titleSelectDuplicateMappingJson": "打开",
     "tabTriggerEditor": "触发",
     "tabUnitEditor": "单位",
     "tabMapView": "地图视图",
@@ -163,6 +171,7 @@
     "titleUnitConst": "单位类型",
     "btnCancel": "取消",
     "btnConfirm": "确认",
+    "btnSave": "保存",
     "comboValueEffectInstructionPanelPosition": "位置{0}",
     "noticeScenarioLoading": "场景加载中...",
     "noticeScenarioLoaded": "场景已加载。",
@@ -172,6 +181,7 @@
     "noticeTriggerJsonAdded": "已从 JSON 添加触发。",
     "noticeTextJsonSaved": "已导出文本为 JSON.",
     "noticeTextJsonImported": "已从 JSON 导入文本。",
+    "noticeDuplicateMappingsLoaded": "已载入复制映射表。",
     "noticeDuplicateCompleted": "已完成复制。",
     "noticeDeduplicateCompleted": "已从其他玩家删除。",
     "noticeDeleteDuplicateCompleted": "已完成删除。",

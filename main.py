@@ -455,13 +455,7 @@ class TCWindow():
         ASPSettings.PRINT_STATUS_UPDATES = False
         self.activeScenario = AoE2DEScenario.from_default()
         ASPSettings.PRINT_STATUS_UPDATES = True
-        print('Loaded default scenario')
-        CeAttributes.setVersion(self.activeScenario.scenario_version)
-        TriggerJsonIO.assignVersion(self.editorVersion)
-        self.openedScenPath = ''
-        self.windowTitleTail = "default"
-        self.triggerManager: TriggerManager = self.activeScenario.trigger_manager
-        self.readScenario()
+        self.__afterLoadScenFile(name='default', path='')
 
     def __catchScenLoadProgress(self, s: str) -> None:
         start = s.find('🔄 Gathering ')
@@ -687,7 +681,7 @@ class TCWindow():
         fSettings.pack(padx=self.dpi(10), pady=self.dpi(10), fill=X)
 
         fConfirmCancel = ttk.Frame(wndPref)
-        ttk.Button(fConfirmCancel, text=TEXT['btnConfirm'], command=on_confirm) \
+        ttk.Button(fConfirmCancel, text=TEXT['btnSave'], command=on_confirm) \
             .pack(side=LEFT, fill=X, expand=YES, padx=self.dpi(40))
         ttk.Button(fConfirmCancel, text=TEXT['btnCancel'], bootstyle=ttk.SECONDARY, command=lambda: _close_dialog(wndPref)) \
             .pack(side=LEFT, fill=X, expand=YES, padx=self.dpi(40))
@@ -1073,6 +1067,21 @@ class TCWindow():
                 self.fTEditor.loadTrigger()
                 self.statusBarMessage(TEXT['noticeTextJsonImported'])
 
+    def loadDuplicateMappings(self):
+        openFilePath = askopenfilename(title=TEXT['titleSelectDuplicateMappingJson'],
+                                       filetypes=[('JSON', '*.json'), (TEXT['typeNameAll'], '*')])
+        if openFilePath:
+            try:
+                self.scenOptions.load(openFilePath)
+            except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
+            except jsonschema.ValidationError as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
+            except Exception as e:
+                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+            else:
+                self.statusBarMessage(TEXT['noticeDuplicateMappingsLoaded'])
+
     def itemSelect(self, event):
         curItem = self.fTEditor.tvTriggerList.focus()
         nodeType = self.fTEditor.tvTriggerList.itemType(curItem)
@@ -1205,7 +1214,7 @@ class TCWindow():
             return
         self.statusBarMessage('', layer='top')
         self.statusBarMessage(TEXT['noticeScenarioLoading'], update=True)
-        if self.activeScenario != None and scenVersion != self.activeScenario.scenario_version:
+        if ScenarioVersion(scenVersion) != self.editorVersion:
             self.restartToLoad = path
             self.root.destroy()
             return
@@ -1261,15 +1270,20 @@ class TCWindow():
         except Exception as e:
             messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
         else:
-            self.editorVersion = ScenarioVersion(self.activeScenario.scenario_version)
-            CeAttributes.setVersion(self.editorVersion)
-            TriggerJsonIO.assignVersion(self.editorVersion)
-            self.windowTitleTail = scenName
-            self.openedScenPath = path
-            self.triggerManager = self.activeScenario.trigger_manager
-            self.readScenario()
+            self.__afterLoadScenFile(scenName, path)
         finally:
             self.logCatch = None
+
+    def __afterLoadScenFile(self, name:str, path:str):
+        self.editorVersion = ScenarioVersion(self.activeScenario.scenario_version)
+        self.scenOptions = ScenarioOptions()
+        CeAttributes.setVersion(self.editorVersion)
+        TriggerJsonIO.assignVersion(self.editorVersion)
+        self.windowTitleTail = name
+        self.openedScenPath = path
+        self.triggerManager = self.activeScenario.trigger_manager
+        self.readScenario()
+        print(f'Loaded {name}')
 
     def openScenarioAskFile(self):
         openFilePath = askopenfilename(title=TEXT['titleSelectScenario'],

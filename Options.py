@@ -1,4 +1,5 @@
 import json
+import jsonschema
 import os
 import ttkbootstrap as ttk
 from _prebuild.OptionsDefine import OPTIONS_DEFINE
@@ -57,6 +58,103 @@ class GlobalOptions():
             self.dump(self._configPath)
 
 class ScenarioOptions():
+    schema = {
+        "type": "object",
+        "properties": {
+            "unitDuplicateMappings" : {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "mapping": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            },
+                            "minItems": 2,
+                            "maxItems": 8
+                        }
+                    }
+                }
+            },
+            "tileDuplicateMappings" : {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "mapping": {
+                            "type": "array",
+                            "items": {
+                                "type": "array",
+                                "items": {
+                                    "type": "integer"
+                                },
+                                "minItems": 2,
+                                "maxItems": 2
+                            },
+                            "minItems": 2,
+                            "maxItems": 8
+                        }
+                    }
+                }
+            },
+            "areaDuplicateMappings" : {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "mapping": {
+                            "type": "array",
+                            "items": {
+                                "type": "array",
+                                "items": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer"
+                                    },
+                                    "minItems": 2,
+                                    "maxItems": 2
+                            },
+                                "minItems": 2,
+                                "maxItems": 2
+                            },
+                            "minItems": 2,
+                            "maxItems": 8
+                        }
+                    }
+                }
+            }
+        },
+        "required": [
+            "unitDuplicateMappings",
+            "tileDuplicateMappings",
+            "areaDuplicateMappings"
+        ]
+    }
+
     def __init__(self):
         self.unitDuplicateMappings: list[list[int]] = []
-        self.tileDuplicateMappings: list[list[tuple[int, int]]] = []
+        self.tileDuplicateMappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+
+    def load(self, file):
+        with open(file, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        jsonschema.validate(cfg, self.schema)
+
+        for mappingItem in cfg["unitDuplicateMappings"]:
+            self.unitDuplicateMappings.append([-1] + mappingItem["mapping"])
+        for mappingItem in cfg["tileDuplicateMappings"]:
+            self.tileDuplicateMappings.append([[-1,-1]] + mappingItem["mapping"])
+        for mappingItem in cfg["areaDuplicateMappings"]:
+            for i, area in enumerate(mappingItem["mapping"]):
+                mappingItem["mapping"][i] = [*area[0], *area[1]]
+            self.tileDuplicateMappings.append([[-1,-1,-1,-1]] + mappingItem["mapping"])

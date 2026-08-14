@@ -126,9 +126,13 @@ class TriggerView(ttk.Frame):
                                             command=lambda: __setCbDuplicateIncludeLimit('includeTarget'))
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateIncludeStrict'], variable=self.app.options.changeFromPlayerOnly)
                 menuDuplicate.add_separator()
+                menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateUseUnitDuplicateMappings'], variable=self.app.options.useUnitDuplicateMappings)
+                menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateUseTileAreaDuplicateMappings'], variable=self.app.options.useTileAreaDuplicateMappings)
+                menuDuplicate.add_separator()
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateAddDuplicateMark'], variable=self.app.options.addDuplicateMark)
                 menuDuplicate.add_separator()
                 # Todo: complete two menu command
+                menuDuplicate.add_command(label=TEXT['menuDuplicateLoadDuplicateMappings'], command=self.app.loadDuplicateMappings)
                 menuDuplicate.add_command(label=TEXT['menuDuplicateDuplicateAllMarked'], state='disabled')
                 menuDuplicate.add_command(label=TEXT['menuDuplicateAdvanced'], state='disabled')
                 btnIDuplicateForAll.bind("<Button-3>",lambda e: menuDuplicate.post(e.x_root, e.y_root))
@@ -678,6 +682,18 @@ class TriggerView(ttk.Frame):
         next = self.tl.next(curItem)
         playerCount = self.app.activeScenario.player_manager.active_players
         create_copy_for_players = list(range(1, playerCount+1))
+        argsTrigger = {
+            "name_fix_format": self.app.options.nameFixFormat.get(),
+            "name_gaia_fix": self.app.options.nameGaiaFix.get()
+        }
+        args = {
+            "change_from_player_only": self.app.options.changeFromPlayerOnly.get(),
+            "include_player_source": self.app.options.includeSource.get(),
+            "include_player_target": self.app.options.includeTarget.get(),
+            "create_copy_for_players": create_copy_for_players,
+            "unit_mappings": self.app.scenOptions.unitDuplicateMappings,
+            "area_mappings": self.app.scenOptions.tileDuplicateMappings
+        }
         if nodeType == 'trigger':
             trigger = self.tm.get_trigger(idToDuplicate)
             if self.app.options.addDuplicateMark.get():
@@ -685,13 +701,7 @@ class TriggerView(ttk.Frame):
                     return
                 if trigger.description.endswith('<Original>'):
                     trigger.description = trigger.description[:-len('<Original>')]
-            newTriggers = self.copyTriggerPerPlayer(PlayerId.ONE, trigger,
-                                                    change_from_player_only = self.app.options.changeFromPlayerOnly.get(),
-                                                    include_player_source = self.app.options.includeSource.get(),
-                                                    include_player_target = self.app.options.includeTarget.get(),
-                                                    create_copy_for_players = create_copy_for_players,
-                                                    name_fix_format = self.app.options.nameFixFormat.get(),
-                                                    name_gaia_fix = self.app.options.nameGaiaFix.get())
+            newTriggers = self.copyTriggerPerPlayer(PlayerId.ONE, trigger, **args, **argsTrigger)
             if self.app.options.addDuplicateMark.get():
                 if not trigger.description.endswith('<Original>'):
                     trigger.description += '<Original>'
@@ -710,11 +720,7 @@ class TriggerView(ttk.Frame):
         elif nodeType == 'condition':
             trigger = self.tm.get_trigger(triggerId)
             condition = trigger.conditions[idToDuplicate]
-            newConditions = self.copyCePerPlayer(PlayerId.ONE, condition, trigger,
-                                                change_from_player_only = self.app.options.changeFromPlayerOnly.get(),
-                                                include_player_source = self.app.options.includeSource.get(),
-                                                include_player_target = self.app.options.includeTarget.get(),
-                                                create_copy_for_players = create_copy_for_players)
+            newConditions = self.copyCePerPlayer(PlayerId.ONE, condition, trigger, **args)
             newCeCount = len(newConditions)
             trigger.condition_order = \
                 trigger.condition_order[0 : displayIdToDuplicate + 1] + \
@@ -727,11 +733,7 @@ class TriggerView(ttk.Frame):
         else:
             trigger = self.tm.get_trigger(triggerId)
             effect = trigger.effects[idToDuplicate]
-            newEffects = self.copyCePerPlayer(PlayerId.ONE, effect, trigger,
-                                                change_from_player_only = self.app.options.changeFromPlayerOnly.get(),
-                                                include_player_source = self.app.options.includeSource.get(),
-                                                include_player_target = self.app.options.includeTarget.get(),
-                                                create_copy_for_players = create_copy_for_players)
+            newEffects = self.copyCePerPlayer(PlayerId.ONE, effect, trigger, **args)
             newCeCount = len(newEffects)
             trigger.effect_order = \
                 trigger.effect_order[0 : displayIdToDuplicate + 1] + \
@@ -845,7 +847,9 @@ class TriggerView(ttk.Frame):
             include_gaia: bool = False,
             create_copy_for_players: list[int] = None,
             name_fix_format: str = "(p{0})",
-            name_gaia_fix: str = "(GAIA)"
+            name_gaia_fix: str = "(GAIA)",
+            unit_mappings: list[list[int]] = [],
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
     ) -> dict[PlayerId, Trigger]:
         """
         Copies a trigger for all or a selection of players. Every copy will change desired player attributes with it.
@@ -900,29 +904,85 @@ class TriggerView(ttk.Frame):
 
             for cond_x in alter_conditions:
                 cond:Condition = new_trigger.conditions[cond_x]
-                if cond.source_player == -1 and cond.target_player == -1:
-                    continue
 
-                if include_player_source:
-                    if not change_from_player_only or (change_from_player_only and cond.source_player == from_player):
-                        cond.source_player = PlayerId(player)
-                if include_player_target:
-                    if not change_from_player_only or (change_from_player_only and cond.target_player == from_player):
-                        cond.target_player = PlayerId(player)
-
+                self.__transformDuplicatedCondition(cond, from_player, player,
+                                                    change_from_player_only, include_player_source, include_player_target,
+                                                    unit_mappings, area_mappings)
             for effect_x in alter_effects:
                 effect:Effect = new_trigger.effects[effect_x]
-                if effect.source_player == -1 and effect.target_player == -1:
-                    continue
 
-                if include_player_source:
-                    if not change_from_player_only or (change_from_player_only and effect.source_player == from_player):
-                        effect.source_player = PlayerId(player)
-                if include_player_target:
-                    if not change_from_player_only or (change_from_player_only and effect.target_player == from_player):
-                        effect.target_player = PlayerId(player)
+                self.__transformDuplicatedEffect(effect, from_player, player,
+                                                 change_from_player_only, include_player_source, include_player_target,
+                                                 unit_mappings, area_mappings)
 
         return return_dict
+
+    def __transformDuplicatedCondition(self, cond:Condition,
+            from_player: int,
+            player,
+            change_from_player_only: bool = False,
+            include_player_source: bool = True,
+            include_player_target: bool = False,
+            unit_mappings: list[list[int]] = [],
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+    ):
+        # Player
+        if cond.source_player != -1 or cond.target_player != -1:
+            if include_player_source:
+                if not change_from_player_only or (change_from_player_only and cond.source_player == from_player):
+                    cond.source_player = PlayerId(player)
+            if include_player_target:
+                if not change_from_player_only or (change_from_player_only and cond.target_player == from_player):
+                    cond.target_player = PlayerId(player)
+
+        # Unit
+        if cond.unit_object != -1 or cond.next_object != -1:
+            for unit_mapping in unit_mappings:
+                if cond.unit_object == unit_mapping[from_player]:
+                    cond.unit_object = unit_mapping[player]
+                if cond.next_object == unit_mapping[from_player]:
+                    cond.next_object = unit_mapping[player]
+
+        # Area
+        if cond.area_x1 != -1:
+            for area_mapping in area_mappings:
+                if area_mapping[from_player] == [cond.area_x1, cond.area_y1, cond.area_x2, cond.area_y2]:
+                    [cond.area_x1, cond.area_y1, cond.area_x2, cond.area_y2] = area_mapping[player]
+
+    def __transformDuplicatedEffect(self, effect:Effect,
+            from_player: int,
+            player,
+            change_from_player_only: bool = False,
+            include_player_source: bool = True,
+            include_player_target: bool = False,
+            unit_mappings: list[list[int]] = [],
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+    ):
+        # Player
+        if effect.source_player != -1 or effect.target_player != -1:
+            if include_player_source:
+                if not change_from_player_only or (change_from_player_only and effect.source_player == from_player):
+                    effect.source_player = PlayerId(player)
+            if include_player_target:
+                if not change_from_player_only or (change_from_player_only and effect.target_player == from_player):
+                    effect.target_player = PlayerId(player)
+
+        # Unit
+        if effect.location_object_reference != -1 or effect.selected_object_ids:
+            for unit_mapping in unit_mappings:
+                for i, unit in enumerate(effect.selected_object_ids):
+                    if unit == unit_mapping[from_player]:
+                        effect.selected_object_ids[i] = unit_mapping[player]
+                if effect.location_object_reference == unit_mapping[from_player]:
+                    effect.location_object_reference = unit_mapping[player]
+
+        # Area, Tile
+        if effect.area_x1 != -1 or effect.location_x != -1:
+            for area_mapping in area_mappings:
+                if area_mapping[from_player] == [effect.area_x1, effect.area_y1, effect.area_x2, effect.area_y2]:
+                    [effect.area_x1, effect.area_y1, effect.area_x2, effect.area_y2] = area_mapping[player]
+                if area_mapping[from_player] == [effect.location_x, effect.location_y]:
+                    [effect.location_x, effect.location_y] = area_mapping[player]
 
     def copyCePerPlayer(
             self,
@@ -933,12 +993,16 @@ class TriggerView(ttk.Frame):
             include_player_source: bool = True,
             include_player_target: bool = False,
             include_gaia: bool = False,
-            create_copy_for_players: list[int] = None
-    ) -> dict[PlayerId, Trigger]:
+            create_copy_for_players: list[int] = None,
+            unit_mappings: list[list[int]] = [],
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+    ) -> dict[PlayerId, Condition | Effect]:
         if type(srcCe) == Condition:
             copyCe = copyCondition
+            transformCe = self.__transformDuplicatedCondition
         else:
             copyCe = copyEffect
+            transformCe = self.__transformDuplicatedEffect
 
         if create_copy_for_players is None:
             create_copy_for_players = [
@@ -956,15 +1020,9 @@ class TriggerView(ttk.Frame):
             new_ce = copyCe(srcCe, parent)
             return_dict[player] = new_ce
 
-            if new_ce.source_player == -1 and new_ce.target_player == -1:
-                continue
-
-            if include_player_source:
-                if not change_from_player_only or (change_from_player_only and new_ce.source_player == from_player):
-                    new_ce.source_player = PlayerId(player)
-            if include_player_target:
-                if not change_from_player_only or (change_from_player_only and new_ce.target_player == from_player):
-                    new_ce.target_player = PlayerId(player)
+            transformCe(new_ce, from_player, player,
+                        change_from_player_only, include_player_source, include_player_target,
+                        unit_mappings, area_mappings)
 
         return return_dict
 
@@ -1028,7 +1086,9 @@ class TriggerView(ttk.Frame):
                                                     include_player_target = self.app.options.includeTarget.get(),
                                                     create_copy_for_players = create_copy_for_players,
                                                     name_fix_format = self.app.options.nameFixFormat.get(),
-                                                    name_gaia_fix = self.app.options.nameGaiaFix.get())
+                                                    name_gaia_fix = self.app.options.nameGaiaFix.get(),
+                                                    unit_mappings=self.app.scenOptions.unitDuplicateMappings,
+                                                    area_mappings=self.app.scenOptions.tileDuplicateMappings)
             if self.app.options.addDuplicateMark.get():
                 if not trigger.description.endswith('<Original>'):
                     trigger.description += '<Original>'
