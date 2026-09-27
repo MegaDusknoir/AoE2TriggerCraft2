@@ -63,7 +63,7 @@
     "textAboutTitle": "触发工坊(Trigger Craft)",
     "textAbout": "作者：夜游神",
     "textAboutRelease": "版本: {0}",
-    "textAboutPoweredBy": "powered by AoE2ScenarioParser",
+    "textAboutPoweredBy": "powered by AoE2ScenarioParser ({0})",
     "titlePreferences": "首选项",
     "titleSelectScenario": "打开",
     "typeNameScenario": "帝国时代 II 决定版场景文件",
@@ -168,6 +168,7 @@
     "labelUnitReferenceId": "单位 ID",
     "labelUnitCaptionStringID": "标题字符串表 ID",
     "labelUnitCaption": "标题",
+    "labelUnitCaptureFlag": "捕获标记",
     "titleUnitConst": "单位类型",
     "btnCancel": "取消",
     "btnConfirm": "确认",
@@ -246,7 +247,8 @@
         "xs_function": "XS 脚本",
         "local_technology": "本地科技",
         "object_group2": "物体种属",
-        "object_type2": "物体类型"
+        "object_type2": "物体类型",
+        "allow_in_fog": "允许在迷雾中"
     },
     "conditionNameFormatForUnknown": "<条件: 未知 {0}>",
     "conditionName": {

@@ -97,7 +97,7 @@ class UnitInfoView(ttk.Frame):
         #endregion Column 2
 
         #region Column 3
-        """caption_string_id"""
+        """caption_string_id, caption_string, capture_flag"""
         lUCaptionID = ttk.Label(self, text=TEXT['labelUnitCaptionStringID'])
         self.eUCaptionID = self.__IntAttributeEntry(self.app, self, 'caption_string_id')
         if self.app.editorVersion >= ScenarioVersion('1.54'):
@@ -108,6 +108,11 @@ class UnitInfoView(ttk.Frame):
         if self.app.editorVersion >= ScenarioVersion('1.55'):
             lUCaption.grid(column=3, row=2, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
             self.eUCaption.grid(column=3, row=3, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+        lUCaptureFlag = ttk.Label(self, text=TEXT['labelUnitCaptureFlag'])
+        self.eUCaptureFlag = self.__IntAttributeEntry(self.app, self, 'capture_flag')
+        if self.app.editorVersion >= ScenarioVersion('1.59'):
+            lUCaptureFlag.grid(column=3, row=4, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
+            self.eUCaptureFlag.grid(column=3, row=5, sticky=EW, padx=self.app.dpi((20, 0)), pady=self.app.dpi((10, 0)))
         #endregion Column 3
 
         self.grid_columnconfigure(0,weight=1)
@@ -238,6 +243,8 @@ class UnitInfoView(ttk.Frame):
             self.eUCaptionID.variable.set(unit.caption_string_id)
         if self.app.editorVersion >= ScenarioVersion('1.55'):
             self.eUCaption.variable.set(unit.caption_string)
+        if self.app.editorVersion >= ScenarioVersion('1.59'):
+            self.eUCaptureFlag.variable.set(unit.capture_flag)
 
 class UnitsSelectButton(ttk.Frame):
     def __init__(self, outer: 'TCWindow', master, multiple: bool,
@@ -304,7 +311,7 @@ class UnitConstTreeView(ttk.Treeview):
     Node text holds the unit const id, and values[0] holds the name.
     Give a filter to list unit consts.
     """
-    unitConstMax = 2382
+    unitConstMax = 2750
 
     def __init__(self, master=None, show=ttk.TREE, selectmode=BROWSE, columns=(0, 1), **kwargs):
         super().__init__(master, show=show, selectmode=selectmode, columns=columns, **kwargs)

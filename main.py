@@ -25,6 +25,7 @@ import PIL.Image
 import PIL.ImageTk
 from webbrowser import open as webOpen
 
+from AoE2ScenarioParser.version import VERSION as ASP_VERSION
 from AoE2ScenarioParser.scenarios.aoe2_de_scenario import AoE2DEScenario
 from AoE2ScenarioParser.objects.managers.map_manager import MapManager
 from AoE2ScenarioParser.objects.managers.trigger_manager import TriggerManager
@@ -798,7 +799,7 @@ class TCWindow():
         lblAbout.pack(side=TOP, pady=self.dpi((0, 6)))
         lblAboutRelease = ttk.Label(self.wndAbout, text=TEXT['textAboutRelease'].format(VERSION_STRING))
         lblAboutRelease.pack(side=TOP)
-        lblAboutPoweredBy = ttk.Label(self.wndAbout, text=TEXT['textAboutPoweredBy'])
+        lblAboutPoweredBy = ttk.Label(self.wndAbout, text=TEXT['textAboutPoweredBy'].format('.'.join(ASP_VERSION)))
         lblAboutPoweredBy.pack(side=BOTTOM, pady=(0, self.dpi(10)))
         self.wndAbout.grab_set()
 

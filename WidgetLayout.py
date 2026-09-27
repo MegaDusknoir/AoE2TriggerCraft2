@@ -34,6 +34,7 @@ CONDITION_WIDGET_FORM = {
     'local_technology':('Combobox', 0,1,int),
     'object_group2': ('Combobox',1,1,int),
     'object_type2': ('Combobox',1,2,int),
+    "allow_in_fog": ('Checkbutton',1,2,int),
 }
 
 EFFECT_WIDGET_FORM = {

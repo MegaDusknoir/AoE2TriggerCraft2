@@ -63,7 +63,7 @@
     "textAboutTitle": "Trigger Craft 2",
     "textAbout": "Author: 夜游神",
     "textAboutRelease": "Release: {0}",
-    "textAboutPoweredBy": "powered by AoE2ScenarioParser",
+    "textAboutPoweredBy": "powered by AoE2ScenarioParser ({0})",
     "titlePreferences": "Preferences",
     "titleSelectScenario": "Open",
     "typeNameScenario": "AoE2DE Scenario File",
@@ -168,6 +168,7 @@
     "labelUnitReferenceId": "Reference ID",
     "labelUnitCaptionStringID": "Caption String ID",
     "labelUnitCaption": "Caption String",
+    "labelUnitCaptureFlag": "Capture Flag",
     "titleUnitConst": "Unit Const",
     "btnCancel": "Cancel",
     "btnConfirm": "Confirm",
@@ -246,7 +247,8 @@
         "xs_function": "XS Function",
         "local_technology": "Local Technology",
         "object_group2": "Object Group",
-        "object_type2": "Object Type"
+        "object_type2": "Object Type",
+        "allow_in_fog": "Allow In Fog"
     },
     "conditionNameFormatForUnknown": "<Condition: Unknown {0}>",
     "conditionName": {
