@@ -350,7 +350,7 @@ class TriggerView(ttk.Frame):
             newTrigger = copy.deepcopy(self.tceClipboard)
             newTrigger.trigger_id = len(self.tm.triggers)
             self.tm.triggers.append(newTrigger)
-            self.tm.trigger_display_order.insert(insertIndex + 1, self.tm.trigger_display_order.pop())
+            self.tm.trigger_display_order.insert(insertIndex, self.tm.trigger_display_order.pop())
             self.triggerNewAfter(insertIndex - 1, newTrigger)
         elif type(self.tceClipboard) in [Condition, Effect]:
             if curItem == '':
