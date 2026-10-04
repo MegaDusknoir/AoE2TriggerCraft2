@@ -142,19 +142,45 @@ class ScenarioOptions():
     }
 
     def __init__(self):
-        self.unitDuplicateMappings: list[list[int]] = []
-        self.tileDuplicateMappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+        self.unitDuplicateMappings: list[dict] = []
+        self.tileDuplicateMappings: list[dict] = []
+        self.areaDuplicateMappings: list[dict] = []
 
     def load(self, file):
         with open(file, 'r', encoding='utf-8') as f:
             cfg = json.load(f)
         jsonschema.validate(cfg, self.schema)
 
+        self.unitDuplicateMappings = []
+        self.tileDuplicateMappings = []
+        self.areaDuplicateMappings = []
         for mappingItem in cfg["unitDuplicateMappings"]:
-            self.unitDuplicateMappings.append([-1] + mappingItem["mapping"])
+            mappingItem["mapping"].extend([-1] * (8 - len(mappingItem["mapping"])))
+            self.unitDuplicateMappings.append({"name": mappingItem["name"], "mapping": [-1] + mappingItem["mapping"]})
         for mappingItem in cfg["tileDuplicateMappings"]:
-            self.tileDuplicateMappings.append([[-1,-1]] + mappingItem["mapping"])
+            mappingItem["mapping"].extend([[-1,-1]] * (8 - len(mappingItem["mapping"])))
+            self.tileDuplicateMappings.append({"name": mappingItem["name"], "mapping": [[-1,-1]] + mappingItem["mapping"]})
         for mappingItem in cfg["areaDuplicateMappings"]:
             for i, area in enumerate(mappingItem["mapping"]):
                 mappingItem["mapping"][i] = [*area[0], *area[1]]
-            self.tileDuplicateMappings.append([[-1,-1,-1,-1]] + mappingItem["mapping"])
+            mappingItem["mapping"].extend([[-1,-1,-1,-1]] * (8 - len(mappingItem["mapping"])))
+            self.areaDuplicateMappings.append({"name": mappingItem["name"], "mapping": [[-1,-1,-1,-1]] + mappingItem["mapping"]})
+            
+    def save(self, file):
+        dump = {
+            "unitDuplicateMappings": [],
+            "tileDuplicateMappings": [],
+            "areaDuplicateMappings": [],
+        }
+        for mappingItem in self.unitDuplicateMappings:
+            dump["unitDuplicateMappings"].append({"name": mappingItem["name"], "mapping": mappingItem["mapping"][1:]})
+        for mappingItem in self.tileDuplicateMappings:
+            dump["tileDuplicateMappings"].append({"name": mappingItem["name"], "mapping": mappingItem["mapping"][1:]})
+        for mappingItem in self.areaDuplicateMappings:
+            dump["areaDuplicateMappings"].append({"name": mappingItem["name"],
+                                                  "mapping": [[[a[0],a[1]],[a[2],a[3]]] for a in mappingItem["mapping"][1:]]})
+        try:
+            with open(file, 'w', encoding='utf-8') as f:
+                json.dump(dump, f, indent=4, ensure_ascii=False)
+        except PermissionError:
+            pass

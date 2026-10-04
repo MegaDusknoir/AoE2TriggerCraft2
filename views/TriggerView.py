@@ -691,8 +691,10 @@ class TriggerView(ttk.Frame):
             "include_player_source": self.app.options.includeSource.get(),
             "include_player_target": self.app.options.includeTarget.get(),
             "create_copy_for_players": create_copy_for_players,
-            "unit_mappings": self.app.scenOptions.unitDuplicateMappings,
-            "area_mappings": self.app.scenOptions.tileDuplicateMappings
+            "unit_mappings": [m["mapping"] for m in self.app.scenOptions.unitDuplicateMappings],
+            "area_mappings": [m["mapping"] for m in self.app.scenOptions.tileDuplicateMappings \
+                + self.app.scenOptions.areaDuplicateMappings],
+            "change_message_color": self.app.options.changeMessageColor.get()
         }
         if nodeType == 'trigger':
             trigger = self.tm.get_trigger(idToDuplicate)
@@ -849,7 +851,8 @@ class TriggerView(ttk.Frame):
             name_fix_format: str = "(p{0})",
             name_gaia_fix: str = "(GAIA)",
             unit_mappings: list[list[int]] = [],
-            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
+            change_message_color: bool = False
     ) -> dict[PlayerId, Trigger]:
         """
         Copies a trigger for all or a selection of players. Every copy will change desired player attributes with it.
@@ -913,7 +916,7 @@ class TriggerView(ttk.Frame):
 
                 self.__transformDuplicatedEffect(effect, from_player, player,
                                                  change_from_player_only, include_player_source, include_player_target,
-                                                 unit_mappings, area_mappings)
+                                                 unit_mappings, area_mappings, change_message_color)
 
         return return_dict
 
@@ -924,7 +927,8 @@ class TriggerView(ttk.Frame):
             include_player_source: bool = True,
             include_player_target: bool = False,
             unit_mappings: list[list[int]] = [],
-            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
+            change_message_color: bool = False
     ):
         # Player
         if cond.source_player != -1 or cond.target_player != -1:
@@ -956,7 +960,8 @@ class TriggerView(ttk.Frame):
             include_player_source: bool = True,
             include_player_target: bool = False,
             unit_mappings: list[list[int]] = [],
-            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
+            change_message_color: bool = False
     ):
         # Player
         if effect.source_player != -1 or effect.target_player != -1:
@@ -983,6 +988,10 @@ class TriggerView(ttk.Frame):
                     [effect.area_x1, effect.area_y1, effect.area_x2, effect.area_y2] = area_mapping[player]
                 if area_mapping[from_player] == [effect.location_x, effect.location_y]:
                     [effect.location_x, effect.location_y] = area_mapping[player]
+        if change_message_color and effect.message:
+            if effect.message.startswith('<BLUE>'):
+                playerColor = ('', '<BLUE>','<RED>','<GREEN>','<YELLOW>','<AQUA>','<PURPLE>','<GREY>','<ORANGE>')
+                effect.message = effect.message.replace('<BLUE>', playerColor[player], count=1)
 
     def copyCePerPlayer(
             self,
@@ -995,7 +1004,8 @@ class TriggerView(ttk.Frame):
             include_gaia: bool = False,
             create_copy_for_players: list[int] = None,
             unit_mappings: list[list[int]] = [],
-            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
+            change_message_color: bool = False
     ) -> dict[PlayerId, Condition | Effect]:
         if type(srcCe) == Condition:
             copyCe = copyCondition
@@ -1022,7 +1032,7 @@ class TriggerView(ttk.Frame):
 
             transformCe(new_ce, from_player, player,
                         change_from_player_only, include_player_source, include_player_target,
-                        unit_mappings, area_mappings)
+                        unit_mappings, area_mappings, change_message_color)
 
         return return_dict
 
@@ -1087,8 +1097,10 @@ class TriggerView(ttk.Frame):
                                                     create_copy_for_players = create_copy_for_players,
                                                     name_fix_format = self.app.options.nameFixFormat.get(),
                                                     name_gaia_fix = self.app.options.nameGaiaFix.get(),
-                                                    unit_mappings=self.app.scenOptions.unitDuplicateMappings,
-                                                    area_mappings=self.app.scenOptions.tileDuplicateMappings)
+                                                    unit_mappings=[m["mapping"] for m in self.app.scenOptions.unitDuplicateMappings],
+                                                    area_mappings=[m["mapping"] for m in self.app.scenOptions.tileDuplicateMappings \
+                                                        + self.app.scenOptions.areaDuplicateMappings],
+                                                    change_message_color=self.app.options.changeMessageColor.get())
             if self.app.options.addDuplicateMark.get():
                 if not trigger.description.endswith('<Original>'):
                     trigger.description += '<Original>'

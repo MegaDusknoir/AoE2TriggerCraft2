@@ -49,6 +49,7 @@ from views.MapView import MapView
 from views.MetaView import MetaView
 from views.TriggerInfo import TriggerInfoView
 from views.CeInfo import CeInfoView
+from views.MappingEditor import MappingEditor
 from Util import DebugTimeCount, ScenarioVersion
 from _prebuild.version import VERSION_STRING
 from _prebuild.AoE2TC_icon import Icon
@@ -376,6 +377,7 @@ class TCWindow():
 
         self.root = ttk.Window('', iconphoto=None)
         self.options = GlobalOptions(workDir)
+        self.scenOptions = ScenarioOptions()
         try:
             loadLocalizedText(workDir, self.options.language.get())
         except ResourcesFileError as e:
@@ -541,6 +543,7 @@ class TCWindow():
         self.imgCeSetLocationUnit = self.__loadImage(f'{workDir}/images/btnCeSetLocUnit.png', self.dpi((20, 20)))
         self.imgCeSetArea = self.__loadImage(f'{workDir}/images/btnCeSetArea.png', self.dpi((20, 20)))
 
+        self.imgBtnAdd = self.__loadImage(f'{workDir}/images/btnAdd.png', self.dpi((20, 20)))
         # load later for start boost
         self.imgAbout = None
 
@@ -590,9 +593,11 @@ class TCWindow():
         self.fTriggerInfo = TriggerInfoView(self, self.nTabsRightBottom)
         self.fCeInfo = CeInfoView(self, self.nTabsRightBottom)
         self.fUnitInfo = UnitInfoView(self, self.nTabsRightBottom)
+        self.fMappingEditor = MappingEditor(self, self.nTabsRightBottom)
         self.nTabsRightBottom.add(self.fTriggerInfo, text=TEXT['tabTriggerInfo'])
         self.nTabsRightBottom.add(self.fCeInfo, text=TEXT['tabEffectInfo'], state="disabled")
         self.nTabsRightBottom.add(self.fUnitInfo, text=TEXT['tabUnitInfo'])
+        self.nTabsRightBottom.add(self.fMappingEditor, text=TEXT['tabMappingEditor'])
 
         self.nTabsRightTop.pack(fill=BOTH, expand=True, padx=0, pady=self.dpi((0, 5)))
         self.nTabsRightBottom.pack(fill=BOTH, expand=True, padx=0, pady=self.dpi((5, 0)))
@@ -1081,7 +1086,30 @@ class TCWindow():
             except Exception as e:
                 messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
             else:
+                self.fMappingEditor.loadConfig()
                 self.statusBarMessage(TEXT['noticeDuplicateMappingsLoaded'])
+
+    def saveDuplicateMappings(self):
+        if not self.openedScenPath:
+            initialFile = 'default.json'
+        else:
+            scenFolder, scenName = os.path.split(self.openedScenPath)
+            scenStem, scenExt = os.path.splitext(scenName)
+            initialFile = scenStem + '.json'
+        saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveDuplicateMappingJson'],
+                                         filetypes=[('JSON', '*.json')])
+        if not saveFilePath:
+            return
+        jsonName, jsonExt = os.path.splitext(saveFilePath)
+        if not jsonExt and not os.path.isfile(saveFilePath):
+            saveFilePath += '.json'
+
+        try:
+            self.scenOptions.save(saveFilePath)
+        except Exception as e:
+            messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+        else:
+            self.statusBarMessage(TEXT['noticeDuplicateMappingsSaved'])
 
     def itemSelect(self, event):
         curItem = self.fTEditor.tvTriggerList.focus()
