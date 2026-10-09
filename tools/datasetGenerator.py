@@ -57,7 +57,9 @@ def getUnitConstInfo(data: DatFile, langStrings: dict[int, str]):
         unitConstInfo[id] = {'name': unitsName,
                              'minimap_mode':getattr(unit, 'minimap_mode', 0),
                              'minimap_color':getattr(unit, 'minimap_color', 0),
-                             'hide_in_editor': getattr(unit, 'hide_in_editor', 1)}
+                             'hide_in_editor': getattr(unit, 'hide_in_editor', 1),
+                             'type': getattr(unit, 'type', 10),
+                             'hero_mode': getattr(getattr(unit, 'creatable', None), 'hero_mode', 0)}
     return unitConstInfo
 
 def getTechName(data: DatFile, langStrings: dict[int, str]):

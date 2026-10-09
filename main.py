@@ -47,6 +47,7 @@ from views.UnitInfo import UnitInfoView
 from views.UnitView import UnitView
 from views.MapView import MapView
 from views.MetaView import MetaView
+from views.DisablesView import DisablesView
 from views.TriggerInfo import TriggerInfoView
 from views.CeInfo import CeInfoView
 from views.MappingEditor import MappingEditor
@@ -585,8 +586,10 @@ class TCWindow():
 
         self.fMetaViewTab = MetaView(self, self.nTabsRightTop)
         self.fMapViewTab = MapView(self, self.nTabsRightTop)
+        self.fDisablesViewTab = DisablesView(self, self.nTabsRightTop)
         self.nTabsRightTop.add(self.fMetaViewTab, text=TEXT['tabMetaView'])
         self.nTabsRightTop.add(self.fMapViewTab, text=TEXT['tabMapView'])
+        self.nTabsRightTop.add(self.fDisablesViewTab, text=TEXT['tabDisablesView'])
         self.nTabsRightTop.select(self.fMapViewTab)
 
         self.triggerManager: TriggerManager
@@ -1324,6 +1327,7 @@ class TCWindow():
         self.fMetaViewTab.loadMeta()
         self.fTEditor.loadTrigger()
         self.fMapViewTab.loadMapView()
+        self.fDisablesViewTab.loadScen()
         self.fUEditor.updatePlayerList()
         self.statusBarMessage(TEXT['noticeScenarioLoaded'])
 

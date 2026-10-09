@@ -125,7 +125,7 @@ class MappingEditor(ttk.Frame):
         fRbGroup.pack(side=LEFT, anchor=W, padx=self.app.dpi((10,10)), pady=self.app.dpi((10,0)))
         self.varRbMapping = ttk.StringVar()
         self.mappingType = ''
-        for i, item in enumerate(['unit', 'tile', 'area']):
+        for item in ('unit', 'tile', 'area'):
             rbMapping = ttk.Radiobutton(fRbGroup, text=TEXT[f'label{item.capitalize()}Mapping'],
                                         variable=self.varRbMapping, value=item)
             rbMapping.pack(side=LEFT, padx=self.app.dpi((0,10)))
