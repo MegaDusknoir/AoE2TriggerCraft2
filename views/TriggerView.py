@@ -503,12 +503,21 @@ class TriggerView(ttk.Frame):
         self.ceAdd(parent, 'condition', newCondition, insertIndex)
 
     def itemDelete(self):
+        def _orderRemoveId(order: list[int], displayIdToRemove: int):
+            idToRemove = order[displayIdToRemove]
+            for i, id in enumerate(order):
+                if id > idToRemove:
+                    order[i] -= 1
+            del order[displayIdToRemove]
+            return order
+
         curItem = self.tl.focus()
         if curItem == '':
             return
         nodeType = self.tl.itemType(curItem)
         parent = self.tl.getTriggerNode(curItem)
         triggerId = self.tl.getNodeId(parent)[0]
+        trigger = self.tm.get_trigger(triggerId)
         idToDelete, displayIdToDelete = self.tl.getNodeId(curItem)
         nextSelection = self.tl.next(curItem)
         if nextSelection == '':
@@ -545,9 +554,10 @@ class TriggerView(ttk.Frame):
                             displayId -= 1
                         self.tl.setNodeId(child, (id, displayId))
             # Call AoE2SP
-            self.tm.get_trigger(triggerId).remove_condition(idToDelete)
-            # Need call this property to update order (ASP 0.4.7)
-            self.tm.get_trigger(triggerId).condition_order
+            old_order = trigger.condition_order.copy()
+            trigger.remove_condition(idToDelete)
+            # Need manually fix order (ASP 0.9.4)
+            trigger.condition_order = _orderRemoveId(old_order, displayIdToDelete)
         else:
             for child in self.tl.get_children(parent):
                 if self.tl.itemType(child) == 'effect':
@@ -561,9 +571,10 @@ class TriggerView(ttk.Frame):
                             displayId -= 1
                         self.tl.setNodeId(child, (id, displayId))
             # Call AoE2SP
-            self.tm.get_trigger(triggerId).remove_effect(idToDelete)
-            # Need call this property to update order (ASP 0.4.7)
-            self.tm.get_trigger(triggerId).effect_order
+            old_order = trigger.effect_order.copy()
+            trigger.remove_effect(idToDelete)
+            # Need manually fix order (ASP 0.9.4)
+            trigger.effect_order = _orderRemoveId(old_order, displayIdToDelete)
 
         self.tl.delete(curItem)
         if nextSelection != '':
