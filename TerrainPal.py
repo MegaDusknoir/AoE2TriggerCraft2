@@ -11,6 +11,22 @@ TERRAIN_COLOR_SHALLOWS = [(77, 135, 163), (84, 146, 176), (90, 157, 189), (97, 1
 TERRAIN_COLOR_FARM     = [(118, 123, 70), (130, 136, 77), (142, 149, 84), (157, 164, 93), (172, 180, 102), (189, 198, 112), (208, 218, 123), (229, 239, 135), (251, 263, 149), (276, 289, 163), (304, 318, 180), (334, 349, 197), (367, 384, 217), (403, 422, 239), (443, 464, 262), (487, 509, 288)]
 TERRAIN_COLOR_FOREST   = [(19, 107, 19), (21, 118, 21), (23, 129, 23), (25, 142, 25), (27, 157, 27), (30, 172, 30), (33, 190, 33), (37, 209, 37), (40, 229, 40), (45, 252, 45), (49, 278, 49), (54, 306, 54), (59, 336, 59), (65, 370, 65), (72, 407, 72), (79, 448, 79)]
 
+_warned_terrains = set()
+def getPal(terrain_id: int) -> list[tuple[int, int, int]]:
+    pal = TERRAIN_PAL.get(terrain_id)
+    if pal is not None:
+        return pal
+
+    if terrain_id not in _warned_terrains:
+        print(f'[Warning] Unknown terrain ID: {terrain_id}')
+        _warned_terrains.add(terrain_id)
+    return TERRAIN_COLOR_BLACK
+
+def getTileColor(terrain_id: int, elevation: int) -> tuple[int,int,int]:
+    pal = getPal(terrain_id)
+    elevation = 15 if elevation > 15 else elevation
+    return pal[elevation]
+
 TERRAIN_PAL = {
     0: TERRAIN_COLOR_GRASS,
     1: TERRAIN_COLOR_WATER_S,
@@ -133,5 +149,17 @@ TERRAIN_PAL = {
     118: TERRAIN_COLOR_FARM,
     119: TERRAIN_COLOR_GRASS,
     120: TERRAIN_COLOR_GRASS,
-    121: TERRAIN_COLOR_GRASS
+    121: TERRAIN_COLOR_GRASS,
+    122: TERRAIN_COLOR_GRASS,
+    123: TERRAIN_COLOR_GRASS,
+    124: TERRAIN_COLOR_GRASS,
+    125: TERRAIN_COLOR_GRASS,
+    126: TERRAIN_COLOR_GRASS,
+    127: TERRAIN_COLOR_ICE,
+    128: TERRAIN_COLOR_FOREST,
+    129: TERRAIN_COLOR_BLACK,
+    130: TERRAIN_COLOR_WATER_S,
+    131: TERRAIN_COLOR_FOREST,
+    132: TERRAIN_COLOR_FOREST,
+    133: TERRAIN_COLOR_FOREST,
 }

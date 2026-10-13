@@ -13,7 +13,7 @@ from PIL import ImageColor
 
 from AoE2ScenarioParser.objects.managers.map_manager import MapManager
 from Localization import TEXT, UNIT_NAME
-from TerrainPal import TERRAIN_PAL
+from TerrainPal import getTileColor
 from CommonPalette import AOE_PAL
 from TriggerAbstract import getAreaAbstract
 from Util import IntListVar, PairValueEntry, ZoomImageViewer, fastAoERotate
@@ -52,7 +52,7 @@ class MapView(ttk.Frame):
 
         self.zvMapView = ZoomImageViewer(self,
                                         PIL.Image.new('RGB', (1,1)), bg="black",
-                                        transform=self.__rotateMap)
+                                        viewport_transform=self.__rotateMapViewport)
         self.zvMapView.pack(side=LEFT, fill=BOTH, expand=YES, anchor=CENTER)
         self.zvMapView.bind('<ButtonRelease-1>', lambda e: \
                             self.drawSetPoint1(
@@ -100,6 +100,10 @@ class MapView(ttk.Frame):
 
         # The top layer shows units
         self.imgUnitsDotLayer: PIL.Image.Image = None
+        self._unitLayerVersion = 0
+        self._mapTransformCacheSource = None
+        self._mapTransformCacheVersion = -1
+        self._mapTransformCacheImage = None
 
         self.sizeMap: int = None
         self.background = self.app.style.colors.bg
@@ -191,13 +195,14 @@ class MapView(ttk.Frame):
         for y in range(0, self.mm.map_height):
             for x in range(0, self.mm.map_width):
                 tile = self.mm.get_tile(x, y)
-                self.imgDotMapRaw.putpixel((x,y), TERRAIN_PAL[tile.terrain_id][tile.elevation])
+                self.imgDotMapRaw.putpixel((x,y), getTileColor(tile.terrain_id, tile.elevation))
         self.loadUnitLayer()
         self.__redrawMap()
         self.zvMapView.see(*self.__inverseMapViewCoordinateConv((self.sizeMap // 2, self.sizeMap // 2)))
 
     def loadUnitLayer(self):
         self.imgUnitsDotLayer = PIL.Image.new('RGBA', (self.sizeMap * 2 + 1, self.sizeMap * 2 + 1), (0,0,0,0))
+        self._unitLayerVersion += 1
         for unit in self.um.get_all_units():
             if UNIT_NAME[unit.unit_const]['minimap_mode'] in [1, 4]:
                 if 0 <= unit.x < self.sizeMap and 0 <= unit.y < self.sizeMap:
@@ -225,6 +230,7 @@ class MapView(ttk.Frame):
         dot_x = int(ux * 2 + 0.5)
         dot_y = int(uy * 2 + 0.5)
         self.imgUnitsDotLayer.putpixel((dot_x,dot_y), (0,0,0,0))
+        self._unitLayerVersion += 1
         for unit in self.um.get_all_units():
             if UNIT_NAME[unit.unit_const]['minimap_mode'] in [1, 4]:
                 if 0 <= unit.x < self.sizeMap and 0 <= unit.y < self.sizeMap:
@@ -269,14 +275,37 @@ class MapView(ttk.Frame):
             fixed[i] = d
         return tuple(fixed)
 
-    def __rotateMap(self, image:PIL.Image.Image, zoom: float) -> PIL.Image.Image:
-        """Transform a dot map to zoomed rhombus view"""
-        image = image.resize((image.width * 4,)*2, resample=Resampling.NEAREST)
-        unitLayer = self.imgUnitsDotLayer.resize((self.imgUnitsDotLayer.width * 2,)*2,
-                                                  resample=Resampling.NEAREST)
-        image.paste(unitLayer, (-int(1),)*2, unitLayer)
-        image = fastAoERotate(image, zoom / 4, fillcolor=self.background)
-        return image
+    def __rotateMapViewport(self, image: PIL.Image.Image, zoom: float,
+                            viewport: tuple[int, int, int, int]
+                            ) -> tuple[PIL.Image.Image, tuple[int, int], tuple[int, int]]:
+        """Transform only the visible portion of the rhombus map."""
+        if self.imgUnitsDotLayer is None:
+            return (PIL.Image.new('RGBA', (1, 1), (0, 0, 0, 0)),
+                    (0, 0), (1, 1))
+
+        if (self._mapTransformCacheSource is not image
+                or self._mapTransformCacheVersion != self._unitLayerVersion):
+            scaled_map = image.resize((image.width * 4,) * 2, resample=Resampling.NEAREST)
+            unit_layer = self.imgUnitsDotLayer.resize(
+                (self.imgUnitsDotLayer.width * 2,) * 2,
+                resample=Resampling.NEAREST)
+            scaled_map.paste(unit_layer, (-1, -1), unit_layer)
+            self._mapTransformCacheSource = image
+            self._mapTransformCacheVersion = self._unitLayerVersion
+            self._mapTransformCacheImage = scaled_map
+
+        rotated_width = (image.width * 4) * (zoom / 4) * sqrt(2)
+        full_width = round(rotated_width)
+        full_height = round(rotated_width / 2)
+        left, top, right, bottom = viewport
+        crop_box = (max(0, left), max(0, top),
+                    min(full_width, right), min(full_height, bottom))
+        if crop_box[0] >= crop_box[2] or crop_box[1] >= crop_box[3]:
+            return (PIL.Image.new('RGBA', (1, 1), (0, 0, 0, 0)),
+                    (left, top), (full_width, full_height))
+        crop = fastAoERotate(self._mapTransformCacheImage, zoom / 4,
+                             fillcolor=self.background, crop_box=crop_box)
+        return crop, (crop_box[0], crop_box[1]), (full_width, full_height)
 
     def __redrawMap(self):
         self.pointSelect.set([-1,]*4)

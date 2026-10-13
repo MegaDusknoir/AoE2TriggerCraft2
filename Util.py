@@ -126,7 +126,8 @@ class ReCompiled():
             return match.group(0)
         return None
 
-def fastAoERotate(image: PIL.Image.Image, scale: float, fillcolor=(255, 255, 255)) -> PIL.Image.Image:
+def fastAoERotate(image: PIL.Image.Image, scale: float, fillcolor=(255, 255, 255),
+                  crop_box: tuple[int, int, int, int] | None = None) -> PIL.Image.Image:
     """
     Fast transform for MapView, equivalent to:
     ```
@@ -153,11 +154,31 @@ def fastAoERotate(image: PIL.Image.Image, scale: float, fillcolor=(255, 255, 255
     e = sqrt2 / scale
     f = -width / 2         # 垂直平移补偿
 
+    if crop_box is None:
+        output_size = (dest_width, dest_height)
+        offset_x = offset_y = 0
+    else:
+        left, top, right, bottom = crop_box
+        left = max(0, min(dest_width, left))
+        top = max(0, min(dest_height, top))
+        right = max(left, min(dest_width, right))
+        bottom = max(top, min(dest_height, bottom))
+        if left == right or top == bottom:
+            return PIL.Image.new(image.mode, (1, 1), fillcolor)
+        output_size = (right - left, bottom - top)
+        offset_x, offset_y = left, top
+
+    fixed_scale = 1 << 16
+    translate_x = (round(c * fixed_scale) + round(a * fixed_scale) * offset_x
+                   + round(b * fixed_scale) * offset_y) / fixed_scale
+    translate_y = (round(f * fixed_scale) + round(d * fixed_scale) * offset_x
+                   + round(e * fixed_scale) * offset_y) / fixed_scale
+
     # 单步变换
     image = image.transform(
-        (dest_width, dest_height),
+        output_size,
         PIL.Image.AFFINE,
-        (a, b, c, d, e, f),
+        (a, b, translate_x, d, e, translate_y),
         resample=PIL.Image.NEAREST,
         fillcolor=fillcolor
     )
@@ -172,10 +193,8 @@ class ZoomImageViewer(tk.Canvas):
     def set_image(self, img: PIL.Image.Image):
         self.original_image = img
         self.__update_display_image()
-        # 更新图像
-        self.itemconfig(self.img_id, image=self.tk_image)
         self.__offset_limit()
-        self.coords(self.img_id, self.offset_x, self.offset_y)
+        self.__update_viewport()
 
     def see(self, x: int, y: int):
         """Focus on a point in unzoomed picture coords"""
@@ -183,7 +202,7 @@ class ZoomImageViewer(tk.Canvas):
         wndHeight = self.winfo_height()
         self.offset_x = wndWidth / 2 - x * self.zoom_factor
         self.offset_y = wndHeight / 2 - y * self.zoom_factor
-        self.coords(self.img_id, self.offset_x, self.offset_y)
+        self.__update_viewport()
 
     def __offset_limit(self):
         """Limit the picture in sight"""
@@ -191,29 +210,35 @@ class ZoomImageViewer(tk.Canvas):
         wndHeight = self.winfo_height()
         if self.offset_x > wndWidth / 2:
             self.offset_x = wndWidth / 2
-        if self.offset_x + self.display_image.width < wndWidth / 2:
-            self.offset_x = wndWidth / 2 - self.display_image.width
+        if self.offset_x + self.display_size[0] < wndWidth / 2:
+            self.offset_x = wndWidth / 2 - self.display_size[0]
         if self.offset_y > wndHeight / 2:
             self.offset_y = wndHeight / 2
-        if self.offset_y + self.display_image.height < wndHeight / 2:
-            self.offset_y = wndHeight / 2 - self.display_image.height
+        if self.offset_y + self.display_size[1] < wndHeight / 2:
+            self.offset_y = wndHeight / 2 - self.display_size[1]
 
     def __init__(self, master, pil_image: PIL.Image.Image,
-                 transform: Callable[[PIL.Image.Image, float], PIL.Image.Image] | None = None, **kwargs):
+                 transform: Callable[[PIL.Image.Image, float], PIL.Image.Image] | None = None,
+                 viewport_transform: Callable[
+                     [PIL.Image.Image, float, tuple[int, int, int, int]],
+                     tuple[PIL.Image.Image, tuple[int, int], tuple[int, int]]
+                 ] | None = None,
+                 **kwargs):
         super().__init__(master, **kwargs)
         self.original_image = pil_image
         self.min_zoom = 2.0
-        self.max_zoom = 24.0
+        self.max_zoom = 48.0
         self.zoom_factor = self.min_zoom * 2
         self.img_id = None
         self.transform = transform
+        self.viewport_transform = viewport_transform
 
-        # 初始显示
         self.display_image = self.original_image.copy()
+        self.display_size = self.display_image.size
+        self.display_origin = (0, 0)
         self.tk_image = PIL.ImageTk.PhotoImage(self.display_image)
         self.img_id = self.create_image(0, 0, anchor="nw", image=self.tk_image)
 
-        # 绑定缩放事件
         self.bind("<Control-MouseWheel>", self.__on_ctrl_mousewheel)
         self.bind("<Configure>", self.__on_resize)
         self.bind("<MouseWheel>", self.__on_mousewheel)
@@ -222,10 +247,8 @@ class ZoomImageViewer(tk.Canvas):
         self.bind("<ButtonPress-1>", self.__on_drag_start)
         self.bind("<Shift-ButtonPress-1>", self.__on_drag_start)
 
-        # 平移偏移（图像相对canvas的偏移）
         self.offset_x = 0
         self.offset_y = 0
-
         self._last_x = 0
         self._last_y = 0
 
@@ -235,11 +258,36 @@ class ZoomImageViewer(tk.Canvas):
         return origin.resize((display_w, display_h), PIL.Image.NEAREST)
 
     def __update_display_image(self):
-        if self.transform is not None:
+        if self.viewport_transform is not None:
+            left = math.floor(-self.offset_x)
+            top = math.floor(-self.offset_y)
+            right = math.ceil(self.winfo_width() - self.offset_x)
+            bottom = math.ceil(self.winfo_height() - self.offset_y)
+            (self.display_image, self.display_origin,
+             self.display_size) = self.viewport_transform(
+                 self.original_image, self.zoom_factor,
+                 (left, top, right, bottom))
+        elif self.transform is not None:
             self.display_image = self.transform(self.original_image, self.zoom_factor)
+            self.display_origin = (0, 0)
+            self.display_size = self.display_image.size
         else:
             self.display_image = self.__default_transform(self.original_image, self.zoom_factor)
+            self.display_origin = (0, 0)
+            self.display_size = self.display_image.size
         self.tk_image = PIL.ImageTk.PhotoImage(self.display_image)
+        self.itemconfig(self.img_id, image=self.tk_image)
+        self.coords(self.img_id,
+                    self.offset_x + self.display_origin[0],
+                    self.offset_y + self.display_origin[1])
+
+    def __update_viewport(self):
+        if self.viewport_transform is not None:
+            self.__update_display_image()
+        else:
+            self.coords(self.img_id,
+                        self.offset_x + self.display_origin[0],
+                        self.offset_y + self.display_origin[1])
 
     def __on_drag_start(self, event):
         self._last_x = event.x
@@ -251,7 +299,7 @@ class ZoomImageViewer(tk.Canvas):
         self.offset_x += delta_x
         self.offset_y += delta_y
         self.__offset_limit()
-        self.coords(self.img_id, self.offset_x, self.offset_y)
+        self.__update_viewport()
         self._last_x = event.x
         self._last_y = event.y
 
@@ -259,13 +307,13 @@ class ZoomImageViewer(tk.Canvas):
         delta = 60 if event.delta > 0 else -60
         self.offset_y += delta
         self.__offset_limit()
-        self.coords(self.img_id, self.offset_x, self.offset_y)
+        self.__update_viewport()
 
     def __on_shift_mousewheel(self, event):
         delta = 120 if event.delta > 0 else -120
         self.offset_x += delta
         self.__offset_limit()
-        self.coords(self.img_id, self.offset_x, self.offset_y)
+        self.__update_viewport()
 
     def __on_ctrl_mousewheel(self, event):
         # 获取滚轮方向
@@ -286,18 +334,15 @@ class ZoomImageViewer(tk.Canvas):
         self.zoom_factor = new_zoom
         self.__update_display_image()
 
-        # 更新图像
-        self.itemconfig(self.img_id, image=self.tk_image)
-
         # 更新偏移：保持鼠标位置不变
         self.offset_x = canvas_x - image_x * self.zoom_factor
         self.offset_y = canvas_y - image_y * self.zoom_factor
         self.__offset_limit()
-        self.coords(self.img_id, self.offset_x, self.offset_y)
+        self.__update_viewport()
 
     def __on_resize(self, event):
         self.__offset_limit()
-        self.coords(self.img_id, self.offset_x, self.offset_y)
+        self.__update_viewport()
         # self.config(scrollregion=self.bbox("all"))
 
 class IntListVar(ttk.Variable):
