@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from dataclasses import replace
+import json
 from typing import TYPE_CHECKING, Literal
 from math import sqrt
 from tkinter.constants import *
@@ -17,6 +19,24 @@ from Util import FilteredMappedCombobox, IntListVar, IntValueButton, ListValueBu
 from WidgetLayout import CONDITION_WIDGET_FORM, EFFECT_WIDGET_FORM
 from CeAttributesManager import CeAttributes
 from views.UnitInfo import UnitConstSelectButton, UnitsSelectButton
+from VirtualEffects import (
+    DisplayInstructionsAttributes,
+    SendChatAttributes,
+    UnitNameAttributes,
+    generate_virtual_effect_function_name,
+    create_localized_display_instructions_script,
+    create_localized_send_chat_script,
+    create_localized_unit_name_script,
+    decode_virtual_effect_json,
+    get_virtual_effect_marker_id,
+    parse_localized_display_instructions_attributes,
+    parse_localized_send_chat_attributes,
+    parse_localized_unit_name_attributes,
+    parse_virtual_effect_header,
+    strict_json_loads,
+    virtual_effect_type_id,
+    virtual_type_id,
+)
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -106,21 +126,48 @@ class CeInfoView(ttk.Frame):
                     case _:
                         pass
 
-        def __showAttributeWidgets(effectTypeId: int, nodeType: Literal['effect', 'condition']) -> None:
+        def __showAttributeWidgets(ceTypeId: int, nodeType: Literal['effect', 'condition']) -> None:
             for ce in self.effectWidgetPacks:
                 for widgetPack in self.effectWidgetPacks[ce].values():
                     widgetPack: CeInfoView.AttributeWidget
                     widgetPack.label.grid_forget()
                     widgetPack.grid_forget()
+            virtualTypeId = None
             if nodeType == 'effect':
                 attributesDict = CeAttributes.effect()
                 attrWidgetFormDict = EFFECT_WIDGET_FORM
                 ceType = Effect
+                virtualTypeId = virtual_type_id(ceTypeId)
+                if virtualTypeId == 0:
+                    layoutTypeId = 3
+                    attributes = [
+                        attribute for attribute in attributesDict.get(layoutTypeId, [])
+                        if attribute not in ('string_id', 'sound_name')
+                    ]
+                    if 'play_sound' not in attributes:
+                        attributes.append('play_sound')
+                elif virtualTypeId == 1:
+                    layoutTypeId = 20
+                    attributes = [
+                        attribute for attribute in attributesDict.get(layoutTypeId, [])
+                        if attribute != 'string_id'
+                    ]
+                elif virtualTypeId == 2:
+                    layoutTypeId = 26
+                    attributes = ['selected_object_ids', 'message']
+                elif virtualTypeId is not None:
+                    layoutTypeId = -1
+                    attributes = []
+                else:
+                    layoutTypeId = ceTypeId
+                    attributes = attributesDict.get(ceTypeId, [])
             else:
                 attributesDict = CeAttributes.condition()
                 attrWidgetFormDict = CONDITION_WIDGET_FORM
                 ceType = Condition
-            for attribute in attributesDict.get(effectTypeId, []):
+                layoutTypeId = ceTypeId
+                attributes = attributesDict.get(ceTypeId, [])
+            for attribute in attributes:
                 __createAttributeWidgets(attrWidgetFormDict, attribute, ceType)
                 if attribute not in self.effectWidgetPacks[ceType]:
                     continue
@@ -130,7 +177,7 @@ class CeInfoView(ttk.Frame):
                     match attrWidgetFormDict[attribute][0]:
                         case 'Entry':
                             widgetRef.gridAttribute(column, row)
-                            if attribute == 'string_id' and effectTypeId in [26, 59, 60, 65, 88]:
+                            if attribute == 'string_id' and layoutTypeId in [26, 59, 60, 65, 88]:
                                 widgetRef.gridAttribute(1, 1)
                         case 'Combobox':
                             widgetRef: CeInfoView.AttributeCombobox
@@ -146,9 +193,13 @@ class CeInfoView(ttk.Frame):
                         case 'Checkbutton':
                             widgetRef.gridAttribute(column, row)
                         case 'TextOrEntry':
-                            if effectTypeId in [26, 48, 51, 56, 59, 60, 65, 79, 81, 82, 83, 87, 88, 104, 105, 106]:
+                            if virtualTypeId == 2:
+                                widgetRef.gridAttribute(
+                                    column, row, columnspan=2, rowspan=3
+                                )
+                            elif layoutTypeId in [26, 48, 51, 56, 59, 60, 65, 79, 81, 82, 83, 87, 88, 104, 105, 106]:
                                 # These use single line entry
-                                if effectTypeId in [26, 59, 60, 65, 88]:
+                                if layoutTypeId in [26, 59, 60, 65, 88]:
                                     # These entry's grid occupied by other attribute so grid elsewhere
                                     self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(1, 2, columnspan=2)
                                 else:
@@ -162,7 +213,7 @@ class CeInfoView(ttk.Frame):
                         case 'UnitConstSelector':
                             widgetRef.gridAttribute(column, row)
                         case 'AreaSelector':
-                            if 'location_object_reference' in attributesDict.get(effectTypeId, []) and \
+                            if 'location_object_reference' in attributes and \
                                 attribute == 'location_x':
                                 widgetRef.gridAttributeWithUnitSel(column, row)
                             else:
@@ -182,7 +233,13 @@ class CeInfoView(ttk.Frame):
             condition = self.app.fTEditor.getCondition(curItem)
             if condition is not None:
                 condition.condition_type = newType
-                # Todo: reset condition arg
+                # Reset illegal condition attr
+                legalAttrs = CeAttributes.condition().get(condition.condition_type, [])
+                defaults = CeAttributes.conditionDefaults().get(condition.condition_type, {})
+                for attribute in defaults:
+                    if attribute not in legalAttrs:
+                        setattr(condition, attribute, defaults[attribute])
+
                 self.updateConditionTreeNode(curItem, condition)
             self.app.itemSelect(None)
             # __showAttributeWidgets(newType, 'condition')
@@ -198,8 +255,118 @@ class CeInfoView(ttk.Frame):
             curItem = self.tl.focus()
             effect = self.app.fTEditor.getEffect(curItem)
             if effect is not None:
-                effect.effect_type = newType
-                # Todo: reset effect arg
+                newVirtualTypeId = virtual_type_id(newType)
+                if newVirtualTypeId in (0, 1, 2):
+                    parsedHeader = parse_virtual_effect_header(effect.message)
+                    currentVirtualTypeId = (
+                        parsedHeader[0] if parsedHeader is not None else None
+                    )
+                    localizedJson = {'group': {}, 'default': ''}
+                    if currentVirtualTypeId in (0, 1, 2):
+                        decoded, parsedJson = decode_virtual_effect_json(parsedHeader[1])
+                        if decoded:
+                            localizedJson = parsedJson
+                    functionName = (
+                        parsedHeader[2]
+                        if currentVirtualTypeId in (0, 1, 2)
+                        else generate_virtual_effect_function_name()
+                    )
+                    effect.effect_type = 55
+                    if newVirtualTypeId == 0:
+                        sendChatAttributes = None
+                        if currentVirtualTypeId == 0:
+                            sendChatAttributes = parse_localized_send_chat_attributes(
+                                effect.message
+                            )
+                        elif currentVirtualTypeId == 1:
+                            displayAttributes = (
+                                parse_localized_display_instructions_attributes(
+                                    effect.message
+                                )
+                            )
+                            if displayAttributes is not None:
+                                sendChatAttributes = SendChatAttributes(
+                                    displayAttributes.source_player,
+                                    displayAttributes.play_sound,
+                                )
+                        if sendChatAttributes is None:
+                            sendChatAttributes = SendChatAttributes(
+                                effect.source_player,
+                                effect.play_sound == 1,
+                            )
+                        effect.message = create_localized_send_chat_script(
+                            functionName,
+                            localizedJson,
+                            sendChatAttributes.source_player,
+                            sendChatAttributes.play_sound,
+                        )
+                    elif newVirtualTypeId == 1:
+                        attributes = None
+                        if currentVirtualTypeId == 1:
+                            attributes = (
+                                parse_localized_display_instructions_attributes(
+                                    effect.message
+                                )
+                            )
+                        if attributes is None:
+                            attributes = self.__getDisplayInstructionsAttributes(
+                                effect,
+                                useCurrentMessage=False,
+                            )
+                            if currentVirtualTypeId == 0:
+                                sendChatAttributes = (
+                                    parse_localized_send_chat_attributes(
+                                        effect.message
+                                    )
+                                )
+                                if sendChatAttributes is not None:
+                                    attributes = replace(
+                                        attributes,
+                                        source_player=sendChatAttributes.source_player,
+                                        play_sound=sendChatAttributes.play_sound,
+                                    )
+                        effect.message = self.__createLocalizedDisplayInstructionsScript(
+                            localizedJson,
+                            attributes,
+                            functionName,
+                        )
+                    else:
+                        unitNameAttributes = (
+                            parse_localized_unit_name_attributes(effect.message)
+                            if currentVirtualTypeId == 2
+                            else None
+                        )
+                        if unitNameAttributes is not None:
+                            unitId = unitNameAttributes.unit_id
+                        else:
+                            selectedObjectIds = effect.selected_object_ids
+                            unitId = selectedObjectIds[0] if selectedObjectIds else -1
+                        effect.message = create_localized_unit_name_script(
+                            functionName,
+                            localizedJson,
+                            unitId,
+                        )
+                else:
+                    if newVirtualTypeId is not None:
+                        self.wEType.load(effect.effect_type)
+                        return
+                    if newType == 55:
+                        markerId = get_virtual_effect_marker_id(effect.message)
+                        if markerId is not None:
+                            effect.message = effect.message[
+                                len(f'/*<TriggerCraftVirtualType:{markerId}>*/'):
+                            ]
+                    effect.effect_type = newType
+                # Reset illegal effect attr
+                legalAttrs = CeAttributes.effect().get(effect.effect_type, [])
+                defaults = CeAttributes.effectDefaults().get(effect.effect_type, {})
+                for attribute in defaults:
+                    if attribute == 'quantity' and 'armour_attack_quantity' in legalAttrs:
+                        continue
+                    if attribute not in legalAttrs:
+                        setattr(effect, attribute, defaults[attribute])
+                if newVirtualTypeId in (0, 1, 2):
+                    effect.string_id = defaults['string_id']
                 self.updateEffectTreeNode(curItem, effect)
             self.app.itemSelect(None)
             # __showAttributeWidgets(newType, 'effect')
@@ -288,10 +455,12 @@ class CeInfoView(ttk.Frame):
             if ceType == Effect:
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
-                    setattr(effect, attribute, variable.get())
+                    value = variable.get()
                     # For MODIFY_ATTRIBUTE
+                    if attribute in ['object_attributes']:
+                        setattr(effect, attribute, value)
                     if attribute in ['object_attributes'] and effect.effect_type in self.outer.fCeInfo.EFFECTS_OBJATTR_WITH_AA_CLASS:
-                        if variable.get() in self.outer.fCeInfo.ATTRIBUTES_WITH_AA:
+                        if value in self.outer.fCeInfo.ATTRIBUTES_WITH_AA:
                             if None in [effect.armour_attack_class, effect.armour_attack_quantity]:
                                 effect.armour_attack_class = -1
                                 effect.armour_attack_quantity = -1
@@ -301,7 +470,12 @@ class CeInfoView(ttk.Frame):
                         self.outer.fCeInfo.effectWidgetPacks[Effect]['armour_attack_class'].load(effect.armour_attack_class)
                         self.outer.fCeInfo.effectWidgetPacks[Effect]['armour_attack_quantity'].load(effect.armour_attack_quantity)
 
-                    self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
+                    if attribute == 'object_attributes':
+                        self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
+                    else:
+                        self.outer.fCeInfo.updateEffectAttribute(
+                            curItem, effect, attribute, value
+                        )
             elif ceType == Condition:
                 condition = self.outer.fTEditor.getCondition(curItem)
                 if condition is not None:
@@ -342,18 +516,18 @@ class CeInfoView(ttk.Frame):
                                 value = float(value)
                             except ValueError:
                                 value = -1
-                            setattr(effect, attribute, value)
                         else:
                             try:
                                 value = int(value)
                             except ValueError:
                                 value = -1
-                            setattr(effect, attribute, value)
                     elif self.supportType == str:
-                        setattr(effect, attribute, value.replace('\n', '\r'))
+                        value = value.replace('\n', '\r')
                     else:
                         raise NotImplementedError(f'{self.supportType} is not expected.')
-                    self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
+                    self.outer.fCeInfo.updateEffectAttribute(
+                        curItem, effect, attribute, value
+                    )
             elif ceType == Condition:
                 condition = self.outer.fTEditor.getCondition(curItem)
                 if condition is not None:
@@ -393,8 +567,9 @@ class CeInfoView(ttk.Frame):
             if ceType == Effect:
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
-                    setattr(effect, attribute, variable.get())
-                    self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
+                    self.outer.fCeInfo.updateEffectAttribute(
+                        curItem, effect, attribute, variable.get()
+                    )
             elif ceType == Condition:
                 condition = self.outer.fTEditor.getCondition(curItem)
                 if condition is not None:
@@ -436,8 +611,9 @@ class CeInfoView(ttk.Frame):
                     effect = self.outer.fTEditor.getEffect(curItem)
                     if effect is not None:
                         description = self.text.get(1.0, 'end-1c')
-                        setattr(effect, attribute, description.replace('\n', '\r'))
-                        self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
+                        self.outer.fCeInfo.updateEffectAttribute(
+                            curItem, effect, attribute, description.replace('\n', '\r')
+                        )
                 case 'trigger':
                     pass
                 case _:
@@ -468,8 +644,9 @@ class CeInfoView(ttk.Frame):
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
                     value = units
-                    setattr(effect, attribute, value)
-                    self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
+                    self.outer.fCeInfo.updateEffectAttribute(
+                        curItem, effect, attribute, value
+                    )
             elif ceType == Condition:
                 condition = self.outer.fTEditor.getCondition(curItem)
                 if condition is not None:
@@ -501,8 +678,9 @@ class CeInfoView(ttk.Frame):
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
                     value = unitConst
-                    setattr(effect, attribute, value)
-                    self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
+                    self.outer.fCeInfo.updateEffectAttribute(
+                        curItem, effect, attribute, value
+                    )
             elif ceType == Condition:
                 condition = self.outer.fTEditor.getCondition(curItem)
                 if condition is not None:
@@ -636,7 +814,13 @@ class CeInfoView(ttk.Frame):
     def __constructEffectComboboxDicts(self, attribute: str) -> dict[int, str]:
         match attribute:
             case 'effect_type':
-                return EFFECT_NAME
+                mapping = EFFECT_NAME
+                mapping.update({
+                    virtual_effect_type_id(virtualTypeId): name
+                    for virtualTypeId, name in TEXT['virtualEffectName'].items()
+                    if isinstance(virtualTypeId, int)
+                })
+                return mapping
             case 'armour_attack_class':
                 return TEXT['datasetDamageClass']
             case 'tribute_list':
@@ -712,6 +896,126 @@ class CeInfoView(ttk.Frame):
         self.tl.item(item, text=' ' + abstract)
         self.app.statusBarMessage(abstract)
 
+    def __getDisplayInstructionsAttributes(
+        self,
+        effect: Effect,
+        useCurrentMessage: bool,
+    ) -> DisplayInstructionsAttributes:
+        return DisplayInstructionsAttributes(
+            message=effect.message if useCurrentMessage else '',
+            display_time=effect.display_time,
+            source_player=effect.source_player,
+            object_list_unit_id=effect.object_list_unit_id,
+            instruction_panel_position=effect.instruction_panel_position,
+            use_tag_color_for_icon=effect.use_tag_color_for_icon == 1,
+            play_sound=effect.play_sound == 1,
+            sound_name=effect.sound_name,
+        )
+
+    def __createLocalizedDisplayInstructionsScript(
+        self,
+        localizedJson: object,
+        attributes: DisplayInstructionsAttributes,
+        functionName: str | None = None,
+        jsonTextValid: bool = True,
+    ) -> str:
+        if functionName is None:
+            functionName = generate_virtual_effect_function_name()
+        return create_localized_display_instructions_script(
+            functionName,
+            localizedJson,
+            attributes.display_time,
+            attributes.source_player,
+            attributes.object_list_unit_id,
+            attributes.instruction_panel_position,
+            attributes.use_tag_color_for_icon,
+            attributes.play_sound,
+            attributes.sound_name,
+            jsonTextValid,
+        )
+
+    def updateEffectAttribute(
+        self,
+        item: str,
+        effect: Effect,
+        attribute: str,
+        value,
+    ) -> None:
+        if effect.effect_type != 55:
+            setattr(effect, attribute, value)
+        else:
+            parsedHeader = parse_virtual_effect_header(effect.message)
+            virtualType = parsedHeader[0] if parsedHeader is not None else None
+            if virtualType in (0, 1, 2):
+                _, metadata, functionName = parsedHeader
+                jsonTextValid, localizedJson = decode_virtual_effect_json(metadata)
+                if not jsonTextValid:
+                    localizedJson = {'group': {}, 'default': ''}
+                if attribute == 'message':
+                    try:
+                        localizedJson = strict_json_loads(value)
+                        jsonTextValid = True
+                    except (TypeError, ValueError):
+                        localizedJson = {'group': {}, 'default': ''}
+                        jsonTextValid = False
+                if virtualType == 0:
+                    attributes = (
+                        parse_localized_send_chat_attributes(effect.message)
+                        or SendChatAttributes(
+                            effect.source_player,
+                            effect.play_sound == 1,
+                        )
+                    )
+                    if attribute == 'source_player':
+                        attributes = replace(attributes, source_player=value)
+                    elif attribute == 'play_sound':
+                        attributes = replace(attributes, play_sound=bool(value))
+                    effect.message = create_localized_send_chat_script(
+                        functionName,
+                        localizedJson,
+                        attributes.source_player,
+                        attributes.play_sound,
+                        jsonTextValid,
+                    )
+                elif virtualType == 1:
+                    attributes = (
+                        parse_localized_display_instructions_attributes(effect.message)
+                        or self.__getDisplayInstructionsAttributes(
+                            effect,
+                            useCurrentMessage=False,
+                        )
+                    )
+                    if attribute != 'message':
+                        attributes = replace(attributes, **{attribute: value})
+                    effect.message = self.__createLocalizedDisplayInstructionsScript(
+                        localizedJson,
+                        attributes,
+                        functionName,
+                        jsonTextValid,
+                    )
+                else:
+                    attributes = (
+                        parse_localized_unit_name_attributes(effect.message)
+                        or UnitNameAttributes(
+                            effect.selected_object_ids[0]
+                            if effect.selected_object_ids else -1
+                        )
+                    )
+                    if attribute == 'selected_object_ids':
+                        selectedObjectIds = value
+                        unitId = selectedObjectIds[0] if selectedObjectIds else -1
+                    else:
+                        unitId = attributes.unit_id
+                    effect.message = create_localized_unit_name_script(
+                        functionName,
+                        localizedJson,
+                        unitId,
+                        jsonTextValid,
+                    )
+            else:
+                setattr(effect, attribute, value)
+        self.updateEffectTreeNode(item, effect)
+
     def loadConditionAttributes(self, condition: Condition):
         abstract = abstractCondition(condition)
         self.wCType.variable.set(condition.condition_type)
@@ -745,22 +1049,97 @@ class CeInfoView(ttk.Frame):
         self.app.statusBarMessage(abstract)
 
     def loadEffectAttributes(self, effect: Effect):
+        decodedMetadata = False
+        metadataJson = None
+        virtualType = None
+        if effect.effect_type == 55:
+            parsedHeader = parse_virtual_effect_header(effect.message)
+            if parsedHeader is not None:
+                virtualType, metadata, _ = parsedHeader
+            if virtualType in (0, 1, 2):
+                decodedMetadata, metadataJson = decode_virtual_effect_json(metadata)
         abstract = abstractEffect(effect)
-        self.wEType.load(effect.effect_type)
-        for attribute in CeAttributes.effect().get(effect.effect_type, []):
+
+        self.wEType.load(
+            virtual_effect_type_id(virtualType) if virtualType is not None
+            else effect.effect_type
+        )
+        if virtualType is not None:
+            if virtualType == 0:
+                virtualAttributes = (
+                    parse_localized_send_chat_attributes(effect.message)
+                    or SendChatAttributes(
+                        effect.source_player,
+                        effect.play_sound == 1,
+                    )
+                )
+                if not decodedMetadata:
+                    metadataJson = {'group': {}, 'default': ''}
+                messageText = json.dumps(metadataJson, ensure_ascii=False, indent=4)
+                effectAttributes = [
+                    attribute for attribute in CeAttributes.effect().get(3, [])
+                    if attribute not in ('string_id', 'sound_name')
+                ]
+                if 'play_sound' not in effectAttributes:
+                    effectAttributes.append('play_sound')
+            elif virtualType == 1:
+                virtualAttributes = (
+                    parse_localized_display_instructions_attributes(effect.message)
+                    or self.__getDisplayInstructionsAttributes(
+                        effect,
+                        useCurrentMessage=False,
+                    )
+                )
+                if not decodedMetadata:
+                    metadataJson = {'group': {}, 'default': ''}
+                messageText = json.dumps(metadataJson, ensure_ascii=False, indent=4)
+                effectAttributes = [
+                    attribute for attribute in CeAttributes.effect().get(20, [])
+                    if attribute != 'string_id'
+                ]
+            elif virtualType == 2:
+                unitNameAttributes = parse_localized_unit_name_attributes(
+                    effect.message
+                )
+                virtualAttributes = unitNameAttributes or UnitNameAttributes(
+                    effect.selected_object_ids[0]
+                    if effect.selected_object_ids else -1
+                )
+                if not decodedMetadata:
+                    metadataJson = {'group': {}, 'default': ''}
+                messageText = json.dumps(metadataJson, ensure_ascii=False, indent=4)
+                effectAttributes = ['selected_object_ids', 'message']
+            else:
+                virtualAttributes = None
+                effectAttributes = CeAttributes.effect().get(effect.effect_type, [])
+        else:
+            virtualAttributes = None
+            effectAttributes = CeAttributes.effect().get(effect.effect_type, [])
+        for attribute in effectAttributes:
             try:
+                if attribute == 'message' and virtualType in (0, 1, 2):
+                    value = messageText
+                elif attribute == 'selected_object_ids' and virtualType == 2:
+                    value = (
+                        [] if virtualAttributes.unit_id == -1
+                        else [virtualAttributes.unit_id]
+                    )
+                elif virtualAttributes is not None:
+                    value = getattr(virtualAttributes, attribute)
+                else:
+                    value = getattr(effect, attribute)
                 match EFFECT_WIDGET_FORM[attribute][0]:
                     case 'null':
                         pass
                     case 'Checkbutton':
-                        self.effectWidgetPacks[Effect][attribute].load(getattr(effect, attribute) == 1)
+                        self.effectWidgetPacks[Effect][attribute].load(value == 1 or value is True)
                     case 'Entry' | 'Combobox' | 'MultiUnitSelector' | 'UnitConstSelector':
-                        self.effectWidgetPacks[Effect][attribute].load(getattr(effect, attribute))
+                        self.effectWidgetPacks[Effect][attribute].load(value)
                     case 'TextOrEntry':
-                        self.effectWidgetPacks[Effect]['__variant_' + attribute].load(getattr(effect, attribute).replace('\r', '\n'))
-                        self.effectWidgetPacks[Effect][attribute].load(getattr(effect, attribute))
+                        self.effectWidgetPacks[Effect]['__variant_' + attribute].load(value.replace('\r', '\n'))
+                        self.effectWidgetPacks[Effect][attribute].load(value)
                     case 'SingleUnitSelector':
-                        self.effectWidgetPacks[Effect][attribute].load([getattr(effect, attribute),])
+                        self.effectWidgetPacks[Effect][attribute].load([value,])
                     case 'AreaSelector':
                         if attribute == 'location_x':
                             location = [
@@ -784,7 +1163,7 @@ class CeInfoView(ttk.Frame):
                                     getattr(effect, 'wall_y2'),
                                 ])
                     case _:
-                        print(attribute, getattr(effect, attribute))
+                        print(attribute, value)
             except:
                 print(f'Load {attribute} fail')
                 raise

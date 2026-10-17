@@ -27,7 +27,8 @@
         "addDuplicateMark": "Add Duplicate Mark",
         "useUnitDuplicateMappings": "Use Unit Mappings",
         "useTileAreaDuplicateMappings": "Use Tile/Area Mappings",
-        "changeMessageColor": "Change Message Color"
+        "changeMessageColor": "Change Message Color",
+        "changeVirtualEffects": "Change Virtual Effects"
     },
     "descPreferences": {
         "enableOverwritingSource": "Allow you to Save (Ctrl+S) the scenario to overwrite itself, make sure you have a backup.",
@@ -40,7 +41,8 @@
         "addDuplicateMark": "Add a mark to triggers' description, both the origin and duplicated ones.",
         "useUnitDuplicateMappings": "Mapping predefined object in trigger to others while duplicating.",
         "useTileAreaDuplicateMappings": "Mapping predefined tile/area in trigger to others while duplicating.",
-        "changeMessageColor": "Allow color tags in message effects to be changed while duplicating."
+        "changeMessageColor": "Allow color tags in message effects to be changed while duplicating.",
+        "changeVirtualEffects": "Allow Player attributes in Virtual Effects to be changed while duplicating."
     },
     "menuLanguage": "Language",
     "menuHelp": "Help",
@@ -483,6 +485,11 @@
         "use_tag_color_for_icon": "Tag Color For Icon"
     },
     "effectNameFormatForUnknown": "<Effect: Unknown {0}>",
+    "virtualEffectName": {
+        "0": "Send Chat (Localized)",
+        "1": "Display Instructions (Localized)",
+        "2": "Change Object Name (Localized)"
+    },
     "effectName": {
         "0": "[None]",
         "1": "Change Diplomacy",
@@ -614,7 +621,8 @@
     "effectDescriptionFormatShift": {
         "0": "None",
         "1": "Let {0} flash to {1}",
-        "2": "Make {2} of {0}'s {1} {4} \"{3}\""
+        "2": "Make {2} of {0}'s {1} {4} \"{3}\"",
+        "100000": "Invalid Virtual Effect {0}"
     },
     "effectDescriptionFormat": {
         "0": "None",
@@ -718,7 +726,10 @@
         "98": "Disable {0} attackable",
         "99": "Enable {0} attackable",
         "100": "Variable {0} {2} Variable {1}",
-        "101": "Variable {0} set to amount of {1}"
+        "101": "Variable {0} set to amount of {1}",
+        "100000": "Send {0} localized \"{1}\"",
+        "100001": "Display localized \"{0}\"",
+        "100002": "Set {0}'s name to localized \"{1}\""
     },
     "dataUnitFaceToName": {
         "-1": "<-1>",

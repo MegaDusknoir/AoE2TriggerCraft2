@@ -27,7 +27,8 @@
         "addDuplicateMark": "添加复制标记",
         "useUnitDuplicateMappings": "使用单位映射表",
         "useTileAreaDuplicateMappings": "使用区域映射表",
-        "changeMessageColor": "转换信息颜色"
+        "changeMessageColor": "转换信息颜色",
+        "changeVirtualEffects": "转换虚拟效果"
     },
     "descPreferences": {
         "enableOverwritingSource": "允许通过保存 (Ctrl+S) 来覆盖原始场景，请确保已做好备份。",
@@ -40,7 +41,8 @@
         "addDuplicateMark": "在原型触发和复制触发的触发描述中添加标记。",
         "useUnitDuplicateMappings": "复制时自动将指定的单位映射到对应的单位。",
         "useTileAreaDuplicateMappings": "复制时自动将指定的区域映射到对应的区域。",
-        "changeMessageColor": "复制时转换信息效果中的颜色标签。"
+        "changeMessageColor": "复制时转换信息效果中的颜色标签。",
+        "changeVirtualEffects": "复制时转换虚拟效果中的玩家属性。"
     },
     "menuLanguage": "语言",
     "menuHelp": "帮助",
@@ -490,6 +492,11 @@
         "use_tag_color_for_icon": "图标使用标签颜色"
     },
     "effectNameFormatForUnknown": "<效果: 未知 {0}>",
+    "virtualEffectName": {
+        "0": "发送聊天（本地化）",
+        "1": "显示指南（本地化）",
+        "2": "改变物体名称（本地化）"
+    },
     "effectName": {
         "0": "<效果: 无>",
         "1": "改变外交态度",
@@ -621,7 +628,8 @@
     "effectDescriptionFormatShift": {
         "0": "无",
         "1": "令{0}对{1}闪烁",
-        "2": "{0}的{1}的{2}{4}「{3}」"
+        "2": "{0}的{1}的{2}{4}「{3}」",
+        "100000": "无效虚拟效果 {0}"
     },
     "effectDescriptionFormat": {
         "0": "无",
@@ -725,7 +733,10 @@
         "98": "设{0}不可被攻击",
         "99": "设{0}可被攻击",
         "100": "变量{0}{2}变量{1}",
-        "101": "变量{0}设为{1}的数量"
+        "101": "变量{0}设为{1}的数量",
+        "100000": "向{0}发送本地化「{1}」",
+        "100001": "显示本地化「{0}」",
+        "100002": "设{0}名称为本地化「{1}」"
     },
     "datasetObjectClass": {
         "-1": "<无>",

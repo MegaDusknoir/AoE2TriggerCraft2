@@ -17,6 +17,10 @@ from Localization import TEXT
 from TriggerAbstract import *
 from Util import Tooltip, ValueSelectButton
 from CeAttributesManager import CeAttributes
+from VirtualEffects import (
+    parse_virtual_effect_header,
+    transform_virtual_effect_player,
+)
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -705,7 +709,8 @@ class TriggerView(ttk.Frame):
             "unit_mappings": [m["mapping"] for m in self.app.scenOptions.unitDuplicateMappings],
             "area_mappings": [m["mapping"] for m in self.app.scenOptions.tileDuplicateMappings \
                 + self.app.scenOptions.areaDuplicateMappings],
-            "change_message_color": self.app.options.changeMessageColor.get()
+            "change_message_color": self.app.options.changeMessageColor.get(),
+            "change_virtual_effects": self.app.options.changeVirtualEffects.get(),
         }
         if nodeType == 'trigger':
             trigger = self.tm.get_trigger(idToDuplicate)
@@ -863,7 +868,8 @@ class TriggerView(ttk.Frame):
             name_gaia_fix: str = "(GAIA)",
             unit_mappings: list[list[int]] = [],
             area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
-            change_message_color: bool = False
+            change_message_color: bool = False,
+            change_virtual_effects: bool = False,
     ) -> dict[PlayerId, Trigger]:
         """
         Copies a trigger for all or a selection of players. Every copy will change desired player attributes with it.
@@ -877,6 +883,8 @@ class TriggerView(ttk.Frame):
             include_player_source: If set to `True`,  allow player source attributes to be changed while copying.
                 Player source attributes are attributes where a player is defined to perform an action such as create an
                 object. If set to `False` these attributes will remain unchanged.
+            change_virtual_effects: If set to `True`, transform supported player attributes stored in virtual-effect
+                scripts while copying.
             include_player_target: If set to `True`,  allow player target attributes to be changed while copying.
                 Player target attributes are attributes where a player is defined as the target such as change ownership
                 or sending resources. If set to `False` these attributes will remain unchanged.
@@ -927,7 +935,8 @@ class TriggerView(ttk.Frame):
 
                 self.__transformDuplicatedEffect(effect, from_player, player,
                                                  change_from_player_only, include_player_source, include_player_target,
-                                                 unit_mappings, area_mappings, change_message_color)
+                                                 unit_mappings, area_mappings, change_message_color,
+                                                 change_virtual_effects)
 
         return return_dict
 
@@ -938,8 +947,7 @@ class TriggerView(ttk.Frame):
             include_player_source: bool = True,
             include_player_target: bool = False,
             unit_mappings: list[list[int]] = [],
-            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
-            change_message_color: bool = False
+            area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = []
     ):
         # Player
         if cond.source_player != -1 or cond.target_player != -1:
@@ -972,8 +980,19 @@ class TriggerView(ttk.Frame):
             include_player_target: bool = False,
             unit_mappings: list[list[int]] = [],
             area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
-            change_message_color: bool = False
+            change_message_color: bool = False,
+            change_virtual_effects: bool = False
     ):
+        if change_virtual_effects and include_player_source and effect.effect_type == 55:
+            transformed_message = transform_virtual_effect_player(
+                effect.message,
+                from_player,
+                player,
+                change_from_player_only,
+            )
+            if transformed_message is not None:
+                effect.message = transformed_message
+
         # Player
         if effect.source_player != -1 or effect.target_player != -1:
             if include_player_source:
@@ -1016,7 +1035,8 @@ class TriggerView(ttk.Frame):
             create_copy_for_players: list[int] = None,
             unit_mappings: list[list[int]] = [],
             area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
-            change_message_color: bool = False
+            change_message_color: bool = False,
+            change_virtual_effects: bool = False
     ) -> dict[PlayerId, Condition | Effect]:
         if type(srcCe) == Condition:
             copyCe = copyCondition
@@ -1041,9 +1061,24 @@ class TriggerView(ttk.Frame):
             new_ce = copyCe(srcCe, parent)
             return_dict[player] = new_ce
 
-            transformCe(new_ce, from_player, player,
-                        change_from_player_only, include_player_source, include_player_target,
-                        unit_mappings, area_mappings, change_message_color)
+            transformArgs = (
+                from_player,
+                player,
+                change_from_player_only,
+                include_player_source,
+                include_player_target,
+                unit_mappings,
+                area_mappings,
+            )
+            if type(srcCe) == Effect:
+                transformCe(
+                    new_ce,
+                    *transformArgs,
+                    change_message_color,
+                    change_virtual_effects,
+                )
+            else:
+                transformCe(new_ce, *transformArgs)
 
         return return_dict
 
@@ -1111,7 +1146,8 @@ class TriggerView(ttk.Frame):
                                                     unit_mappings=[m["mapping"] for m in self.app.scenOptions.unitDuplicateMappings],
                                                     area_mappings=[m["mapping"] for m in self.app.scenOptions.tileDuplicateMappings \
                                                         + self.app.scenOptions.areaDuplicateMappings],
-                                                    change_message_color=self.app.options.changeMessageColor.get())
+                                                    change_message_color=self.app.options.changeMessageColor.get(),
+                                                    change_virtual_effects=self.app.options.changeVirtualEffects.get())
             if self.app.options.addDuplicateMark.get():
                 if not trigger.description.endswith('<Original>'):
                     trigger.description += '<Original>'

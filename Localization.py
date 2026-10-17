@@ -18,6 +18,7 @@ class LanguageDict(dict):
         'conditionDescriptionInvertFormat',
         'effectAttributeName',
         'effectName',
+        'virtualEffectName',
         'effectDescriptionFormatShift',
         'effectDescriptionFormat',
         'datasetObjectClass',

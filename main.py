@@ -52,6 +52,12 @@ from views.TriggerInfo import TriggerInfoView
 from views.CeInfo import CeInfoView
 from views.MappingEditor import MappingEditor
 from Util import DebugTimeCount, ScenarioVersion
+from VirtualEffects import (
+    ensure_unique_virtual_effect_function_names,
+    parse_localized_display_instructions,
+    parse_localized_send_chat,
+    parse_localized_unit_name,
+)
 from _prebuild.version import VERSION_STRING
 from _prebuild.AoE2TC_icon import Icon
 from _prebuild.OptionsDefine import OPTIONS_DEFINE
@@ -253,9 +259,20 @@ class TriggerJsonIO():
             for e_display_id in range(len(trigger.effects)):
                 effect = trigger.effects[trigger.effect_order[e_display_id]]
                 effectDict = {}
+                isVirtualEffectMessage = (
+                    effect.effect_type == 55
+                    and (
+                        parse_localized_send_chat(effect.message) is not None
+                        or parse_localized_display_instructions(effect.message) is not None
+                        or parse_localized_unit_name(effect.message) is not None
+                    )
+                )
                 for attr in cls.effectTextAttributesSet:
                     if attr in CeAttributes.effect().get(effect.effect_type, []) \
-                        and effect.effect_type not in (55, 56, 81, 82, 83) \
+                        and (
+                            effect.effect_type not in (55, 56, 81, 82, 83)
+                            or (isVirtualEffectMessage and attr == 'message')
+                        ) \
                         and getattr(effect, attr).strip() != '':
                             effectDict[attr] = getattr(effect, attr)
                 if len(effectDict) != 0:
@@ -1164,6 +1181,9 @@ class TCWindow():
 
     def __saveScen(self, path):
         try:
+            ensure_unique_virtual_effect_function_names(
+                self.activeScenario.trigger_manager
+            )
             self.activeScenario.write_to_file(path)
         except OverflowError as e:
             if isinstance(e.args[0], str) and e.args[0] == 'int too big to convert':

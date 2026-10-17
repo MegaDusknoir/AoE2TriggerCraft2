@@ -8,6 +8,16 @@ from AoE2ScenarioParser.datasets.conditions import ConditionId
 from AoE2ScenarioParser.datasets.effects import EffectId
 from AoE2ScenarioParser.exceptions.asp_exceptions import UnsupportedAttributeError, UnsupportedVersionError
 
+from VirtualEffects import (
+    VIRTUAL_EFFECT_TYPE_ID_BASE,
+    get_virtual_effect_marker_id,
+    parse_localized_display_instructions,
+    parse_localized_send_chat_attributes,
+    parse_localized_send_chat,
+    parse_localized_unit_name,
+    parse_localized_unit_name_attributes,
+    validate_localized_effect_json,
+)
 
 class FindCFunction():
     FUNC_NAME_RE = None
@@ -167,6 +177,70 @@ def getAreaAbstract(area_x1: int, area_y1: int,
         return f'({area_x1},{area_y1})'
     else:
         return f'({area_x1},{area_y1})~({area_x2},{area_y2})'
+
+def getVirtualEffectAbstract(script, virtualEffectType):
+    formatString = TEXT['effectDescriptionFormatShift'][100000]
+    if virtualEffectType == 0:
+        parsedVirtualEffect = parse_localized_send_chat(script)
+        if parsedVirtualEffect is not None:
+            _, decoded, data = parsedVirtualEffect
+            if not decoded:
+                formatString = TEXT['effectDescriptionFormatShift'][100000]
+                return formatString.format(virtualEffectType)
+            formatString = TEXT['effectDescriptionFormat'][VIRTUAL_EFFECT_TYPE_ID_BASE]
+            message = (
+                getMessageAbstract(data['default'])
+                if validate_localized_effect_json(data)
+                else getMessageAbstract('')
+            )
+            chatAttributes = parse_localized_send_chat_attributes(
+                script
+            )
+            return formatString.format(
+                getPlayerAbstract(
+                    chatAttributes.source_player
+                    if chatAttributes is not None
+                    else -1
+                ),
+                message,
+            )
+    elif virtualEffectType == 1:
+        parsedVirtualEffect = parse_localized_display_instructions(script)
+        if parsedVirtualEffect is not None:
+            _, decoded, data = parsedVirtualEffect
+            if decoded != True:
+                formatString = TEXT['effectDescriptionFormatShift'][100000]
+                return formatString.format(virtualEffectType)
+            else:
+                if not validate_localized_effect_json(data):
+                    msg = getMessageAbstract('')
+                else:
+                    msg = getMessageAbstract(data["default"])
+                formatString = TEXT['effectDescriptionFormat'][VIRTUAL_EFFECT_TYPE_ID_BASE + virtualEffectType]
+                return formatString.format(msg)
+    elif virtualEffectType == 2:
+        parsedVirtualEffect = parse_localized_unit_name(script)
+        if parsedVirtualEffect is not None:
+            _, decoded, data = parsedVirtualEffect
+            if not decoded or not validate_localized_effect_json(data):
+                formatString = TEXT['effectDescriptionFormatShift'][100000]
+                return formatString.format(virtualEffectType)
+            unitNameAttributes = parse_localized_unit_name_attributes(
+                script
+            )
+            unitId = (
+                unitNameAttributes.unit_id
+                if unitNameAttributes is not None else -1
+            )
+            target = getNonSpecificUnitAbstract(
+                -1, -1, -1,
+                unit=[] if unitId == -1 else [unitId],
+                allowAreaEmpty=True,
+            )
+            formatString = TEXT['effectDescriptionFormat'][VIRTUAL_EFFECT_TYPE_ID_BASE + virtualEffectType]
+            return formatString.format(target, getMessageAbstract(data['default']))
+    else:
+        return formatString.format(virtualEffectType)
 
 def abstractCondition(condition: Condition) -> str:
     typeKey = condition.condition_type
@@ -719,11 +793,14 @@ def abstractEffect(effect: Effect) -> str:
                                             getLocationAbstract(effect.location_x,
                                                                 effect.location_y))
                 case EffectId.SCRIPT_CALL:
-                    scriptAbstract = FindCFunction.findFirstCFunctionName(effect.message)
-                    if scriptAbstract == None:
-                        scriptAbstract = getMessageAbstract(effect.message)
-                    return formatString.format(scriptAbstract)
-                    # return formatString.format(effect.message[0:effect.message.find('{')].strip('void ').strip() + '...')
+                    virtualEffectType = get_virtual_effect_marker_id(effect.message)
+                    if virtualEffectType is not None:
+                        return getVirtualEffectAbstract(effect.message, virtualEffectType)
+                    else:
+                        scriptAbstract = FindCFunction.findFirstCFunctionName(effect.message)
+                        if scriptAbstract == None:
+                            scriptAbstract = getMessageAbstract(effect.message)
+                        return formatString.format(scriptAbstract)
                 case EffectId.CHANGE_VARIABLE:
                     return formatString.format(effect.variable,
                                             effect.quantity,

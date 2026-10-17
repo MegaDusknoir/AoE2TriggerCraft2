@@ -37,6 +37,9 @@ def createCeAttributeDict(outPath):
 
     effectAttributesAllVersion = {}
     conditionAttributesAllVersion = {}
+    effectAttributeDefaultValueAllVersion = {}
+    conditionAttributeDefaultValueAllVersion = {}
+
     for version in INCLUDING_VERSION:
         with open(f'{package_path}/versions/DE/v{version}/effects.json', 'r', encoding='utf-8') as f:
             effectStruct = json.load(f)
@@ -64,9 +67,42 @@ def createCeAttributeDict(outPath):
                 conditionAttributes[int(condition)] = attributes
         conditionAttributesAllVersion[version] = conditionAttributes
 
+        conditionAttributeDefaultValues = {}
+        for condition in conditionStruct:
+            if 'default_attributes' in conditionStruct[condition]:
+                conditionAttributeDefaultValues[int(condition)] = {
+                    k:v for k,v in conditionStruct[condition]['default_attributes'].items()
+                    if k not in ('condition_type',)
+                }
+        for condition, default in conditionAttributeDefaultValues.items():
+            base = conditionAttributeDefaultValues[0].copy()
+            base.update(default)
+            conditionAttributeDefaultValues[condition] = base
+        conditionAttributeDefaultValueAllVersion[version] = conditionAttributeDefaultValues
+
+        effectAttributeDefaultValues = {}
+        for effect in effectStruct:
+            if 'default_attributes' in effectStruct[effect]:
+                effectAttributeDefaultValues[int(effect)] = {
+                    k:v for k,v in effectStruct[effect]['default_attributes'].items()
+                    if k not in (
+                        'effect_type',
+                        'quantity_float', # quantity_float and below is hidden attrs in ASP
+                        'armour_attack_class', # virtual attribute in ASP
+                        'armour_attack_quantity' # virtual attribute in ASP
+                    )
+                }
+        for effect, default in effectAttributeDefaultValues.items():
+            base = effectAttributeDefaultValues[0].copy()
+            base.update(default)
+            effectAttributeDefaultValues[effect] = base
+        effectAttributeDefaultValueAllVersion[version] = effectAttributeDefaultValues
+
     with open(outPath, 'w', encoding='utf-8') as f:
         f.write('EFFECT_ATTRIBUTES_ALL_VERSION = ' + str(effectAttributesAllVersion) + '\n')
         f.write('CONDITION_ATTRIBUTES_ALL_VERSION = ' + str(conditionAttributesAllVersion) + '\n')
+        f.write('EFFECT_ATTRIBUTE_DEFAULT_VALUE_ALL_VERSION = ' + str(effectAttributeDefaultValueAllVersion) + '\n')
+        f.write('CONDITION_ATTRIBUTE_DEFAULT_VALUE_ALL_VERSION = ' + str(conditionAttributeDefaultValueAllVersion) + '\n')
 
 def createOptionsDefine(csvPath, outPath):
     with open(csvPath, newline='', encoding='utf-8') as csvfile:
