@@ -56,6 +56,7 @@ from VirtualEffects import (
     ensure_unique_virtual_effect_function_names,
     parse_localized_display_instructions,
     parse_localized_send_chat,
+    parse_localized_tech_name,
     parse_localized_unit_name,
 )
 from _prebuild.version import VERSION_STRING
@@ -265,6 +266,7 @@ class TriggerJsonIO():
                         parse_localized_send_chat(effect.message) is not None
                         or parse_localized_display_instructions(effect.message) is not None
                         or parse_localized_unit_name(effect.message) is not None
+                        or parse_localized_tech_name(effect.message) is not None
                     )
                 )
                 for attr in cls.effectTextAttributesSet:

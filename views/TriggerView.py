@@ -17,10 +17,7 @@ from Localization import TEXT
 from TriggerAbstract import *
 from Util import Tooltip, ValueSelectButton
 from CeAttributesManager import CeAttributes
-from VirtualEffects import (
-    parse_virtual_effect_header,
-    transform_virtual_effect_player,
-)
+from VirtualEffects import transform_virtual_effect_all_in_one
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -33,6 +30,7 @@ def copyEffect(effect: Effect, parent: Trigger):
     for attribute in CeAttributes.effect().get(srcEffect.effect_type, []):
         setattr(newEffect, attribute, getattr(srcEffect, attribute))
     return newEffect
+
 
 def copyCondition(condition: Condition, parent: Trigger):
     trigger = parent
@@ -983,12 +981,16 @@ class TriggerView(ttk.Frame):
             change_message_color: bool = False,
             change_virtual_effects: bool = False
     ):
-        if change_virtual_effects and include_player_source and effect.effect_type == 55:
-            transformed_message = transform_virtual_effect_player(
+        playerColor = ('', '<BLUE>','<RED>','<GREEN>','<YELLOW>','<AQUA>','<PURPLE>','<GREY>','<ORANGE>')
+        if change_virtual_effects and effect.effect_type == 55:
+            transformed_message = transform_virtual_effect_all_in_one(
                 effect.message,
                 from_player,
                 player,
+                include_player_source,
                 change_from_player_only,
+                playerColor if change_message_color else None,
+                unit_mappings,
             )
             if transformed_message is not None:
                 effect.message = transformed_message
@@ -1018,9 +1020,9 @@ class TriggerView(ttk.Frame):
                     [effect.area_x1, effect.area_y1, effect.area_x2, effect.area_y2] = area_mapping[player]
                 if area_mapping[from_player] == [effect.location_x, effect.location_y]:
                     [effect.location_x, effect.location_y] = area_mapping[player]
+        # Message
         if change_message_color and effect.message:
             if effect.message.startswith('<BLUE>'):
-                playerColor = ('', '<BLUE>','<RED>','<GREEN>','<YELLOW>','<AQUA>','<PURPLE>','<GREY>','<ORANGE>')
                 effect.message = effect.message.replace('<BLUE>', playerColor[player], count=1)
 
     def copyCePerPlayer(

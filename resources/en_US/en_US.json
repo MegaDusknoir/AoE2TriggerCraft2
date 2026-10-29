@@ -488,7 +488,8 @@
     "virtualEffectName": {
         "0": "Send Chat (Localized)",
         "1": "Display Instructions (Localized)",
-        "2": "Change Object Name (Localized)"
+        "2": "Change Object Name (Localized)",
+        "3": "Change Technology Name (Localized)"
     },
     "effectName": {
         "0": "[None]",
@@ -729,7 +730,8 @@
         "101": "Variable {0} set to amount of {1}",
         "100000": "Send {0} localized \"{1}\"",
         "100001": "Display localized \"{0}\"",
-        "100002": "Set {0}'s name to localized \"{1}\""
+        "100002": "Set {0}'s name to localized \"{1}\"",
+        "100003": "Change name of {0}'s {1} to localized \"{2}\""
     },
     "dataUnitFaceToName": {
         "-1": "<-1>",

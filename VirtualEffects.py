@@ -57,6 +57,11 @@ _LOCALIZED_UNIT_NAME_ID_RE = re.compile(
     r'\bxsSetUnitName\s*\(\s*(?P<unit_id>-?\d+)\s*,\s*m\s*\)\s*;',
     re.IGNORECASE,
 )
+_LOCALIZED_TECH_NAME_ARGUMENTS_RE = re.compile(
+    r'\bxsSetTechName\s*\(\s*(?P<technology>-?\d+)\s*,\s*'
+    r'(?P<source_player>-?\d+)\s*,\s*m\s*\)\s*;',
+    re.IGNORECASE,
+)
 
 
 def _reject_nonstandard_json_constant(value: str):
@@ -91,6 +96,12 @@ class SendChatAttributes:
 @dataclass(frozen=True)
 class UnitNameAttributes:
     unit_id: int
+
+
+@dataclass(frozen=True)
+class TechNameAttributes:
+    technology: int
+    source_player: int
 
 
 DEFAULT_DISPLAY_INSTRUCTIONS_ATTRIBUTES = DisplayInstructionsAttributes(
@@ -405,6 +416,21 @@ def create_localized_unit_name_body(
     return _create_localized_message_body(data, create_call, json_text_valid)
 
 
+def create_localized_tech_name_body(
+    data: object,
+    technology: int,
+    source_player: int,
+    json_text_valid: bool = True,
+) -> str:
+    def create_call(message_expression: str) -> str:
+        return (
+            f'xsSetTechName({technology},{source_player},'
+            f'{message_expression});'
+        )
+
+    return _create_localized_message_body(data, create_call, json_text_valid)
+
+
 def _xs_text_expression(text: str) -> str:
     def _escapeXsString(text: str) -> str:
         return (
@@ -492,6 +518,27 @@ def create_localized_unit_name_script(
     )
 
 
+def create_localized_tech_name_script(
+    function_name: str,
+    data: object,
+    technology: int,
+    source_player: int,
+    json_text_valid: bool = True,
+) -> str:
+    body = create_localized_tech_name_body(
+        data,
+        technology,
+        source_player,
+        json_text_valid,
+    )
+    return build_virtual_effect_script(
+        3,
+        function_name,
+        body,
+        encode_virtual_effect_json(data),
+    )
+
+
 def parse_virtual_effect_json_metadata(
     code: str | None,
 ) -> tuple[int, str, bool, object | None] | None:
@@ -526,6 +573,15 @@ def parse_localized_unit_name(
 ) -> tuple[str, bool, object | None] | None:
     parsed = parse_virtual_effect_json_metadata(code)
     if parsed is None or parsed[0] != 2:
+        return None
+    return parsed[1], parsed[2], parsed[3]
+
+
+def parse_localized_tech_name(
+    code: str | None,
+) -> tuple[str, bool, object | None] | None:
+    parsed = parse_virtual_effect_json_metadata(code)
+    if parsed is None or parsed[0] != 3:
         return None
     return parsed[1], parsed[2], parsed[3]
 
@@ -620,12 +676,29 @@ def parse_localized_unit_name_attributes(
     return UnitNameAttributes(unit_id=int(match.group('unit_id')))
 
 
-def transform_virtual_effect_player(
+def transform_virtual_effect_all_in_one(
     code: str | None,
     from_player: int,
     to_player: int,
+    include_player_source: bool = False,
     change_from_player_only: bool = False,
+    color_tag_mapping: list[str] = None,
+    unit_mappings: list[list[int]] = [],
 ) -> str | None:
+    def change_color_tag(data:dict[str,str]) -> bool:
+        modified = False
+        for language_key, text in data.items():
+            if language_key in ('group',):
+                continue
+            if text.startswith(color_tag_mapping[from_player]):
+                data[language_key] = text.replace(
+                    color_tag_mapping[from_player],
+                    color_tag_mapping[to_player],
+                    count=1
+                )
+                modified = True
+        return modified
+
     parsed_script = parse_virtual_effect_script(code)
     parsed_header = parse_virtual_effect_header(code)
     if parsed_script is None or parsed_header is None:
@@ -633,41 +706,128 @@ def transform_virtual_effect_player(
 
     virtual_type_id, function_name, _ = parsed_script
     header_type_id, metadata, _ = parsed_header
-    if virtual_type_id != header_type_id or virtual_type_id not in (0, 1):
+    if virtual_type_id != header_type_id:
+        return None
+
+    if not (
+        color_tag_mapping
+        or (virtual_type_id in (0, 1, 3) and include_player_source)
+        or (virtual_type_id in (2,) and unit_mappings)
+    ):
         return None
 
     decoded, data = decode_virtual_effect_json(metadata)
     if not decoded or not validate_localized_effect_json(data):
         return None
 
+    recreate = False
     if virtual_type_id == 0:
         attributes = parse_localized_send_chat_attributes(code)
         if attributes is None:
             return None
-        if change_from_player_only and attributes.source_player != from_player:
-            return code
-        return create_localized_send_chat_script(
-            function_name,
-            data,
-            to_player,
-            attributes.play_sound,
-        )
+        source_player = attributes.source_player
+        if include_player_source and (
+            not change_from_player_only or attributes.source_player == from_player
+        ):
+            source_player = to_player
+            recreate = True
+        if color_tag_mapping:
+            if change_color_tag(data):
+                recreate = True
+        if recreate:
+            return create_localized_send_chat_script(
+                function_name,
+                data,
+                source_player,
+                attributes.play_sound,
+            )
 
-    attributes = parse_localized_display_instructions_attributes(code)
-    if attributes is None:
+    if virtual_type_id == 1:
+        attributes = parse_localized_display_instructions_attributes(code)
+        if attributes is None:
+            return None
+        source_player = attributes.source_player
+        if include_player_source and (
+            not change_from_player_only or attributes.source_player == from_player
+        ):
+            source_player = to_player
+            recreate = True
+        if color_tag_mapping:
+            if change_color_tag(data):
+                recreate = True
+        if recreate:
+            return create_localized_display_instructions_script(
+                function_name,
+                data,
+                attributes.display_time,
+                source_player,
+                attributes.object_list_unit_id,
+                attributes.instruction_panel_position,
+                attributes.use_tag_color_for_icon,
+                attributes.play_sound,
+                attributes.sound_name,
+            )
+
+    if virtual_type_id == 2:
+        attributes = parse_localized_unit_name_attributes(code)
+        if attributes is None:
+            return None
+
+        unit_id = attributes.unit_id
+        if unit_mappings:
+            for unit_mapping in unit_mappings:
+                if attributes.unit_id == unit_mapping[from_player]:
+                    unit_id = unit_mapping[to_player]
+                    recreate = True
+                    break
+        if color_tag_mapping:
+            if change_color_tag(data):
+                recreate = True
+        if recreate:
+            return create_localized_unit_name_script(
+                function_name,
+                data,
+                unit_id,
+            )
+
+    if virtual_type_id == 3:
+        attributes = parse_localized_tech_name_attributes(code)
+        if attributes is None:
+            return None
+        source_player = attributes.source_player
+        if include_player_source and (
+            not change_from_player_only or attributes.source_player == from_player
+        ):
+            source_player = to_player
+            recreate = True
+        if color_tag_mapping:
+            if change_color_tag(data):
+                recreate = True
+        if recreate:
+            return create_localized_tech_name_script(
+                function_name,
+                data,
+                attributes.technology,
+                source_player,
+            )
+
+    return None
+
+
+def parse_localized_tech_name_attributes(
+    code: str | None,
+) -> TechNameAttributes | None:
+    if not isinstance(code, str):
         return None
-    if change_from_player_only and attributes.source_player != from_player:
-        return code
-    return create_localized_display_instructions_script(
-        function_name,
-        data,
-        attributes.display_time,
-        to_player,
-        attributes.object_list_unit_id,
-        attributes.instruction_panel_position,
-        attributes.use_tag_color_for_icon,
-        attributes.play_sound,
-        attributes.sound_name,
+    match = _find_xs_call_arguments(
+        _LOCALIZED_TECH_NAME_ARGUMENTS_RE,
+        code,
+    )
+    if match is None:
+        return None
+    return TechNameAttributes(
+        technology=int(match.group('technology')),
+        source_player=int(match.group('source_player')),
     )
 
 

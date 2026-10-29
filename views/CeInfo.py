@@ -22,15 +22,18 @@ from views.UnitInfo import UnitConstSelectButton, UnitsSelectButton
 from VirtualEffects import (
     DisplayInstructionsAttributes,
     SendChatAttributes,
+    TechNameAttributes,
     UnitNameAttributes,
     generate_virtual_effect_function_name,
     create_localized_display_instructions_script,
     create_localized_send_chat_script,
+    create_localized_tech_name_script,
     create_localized_unit_name_script,
     decode_virtual_effect_json,
     get_virtual_effect_marker_id,
     parse_localized_display_instructions_attributes,
     parse_localized_send_chat_attributes,
+    parse_localized_tech_name_attributes,
     parse_localized_unit_name_attributes,
     parse_virtual_effect_header,
     strict_json_loads,
@@ -155,6 +158,12 @@ class CeInfoView(ttk.Frame):
                 elif virtualTypeId == 2:
                     layoutTypeId = 26
                     attributes = ['selected_object_ids', 'message']
+                elif virtualTypeId == 3:
+                    layoutTypeId = 65
+                    attributes = [
+                        attribute for attribute in attributesDict.get(65, [])
+                        if attribute != 'string_id'
+                    ]
                 elif virtualTypeId is not None:
                     layoutTypeId = -1
                     attributes = []
@@ -193,7 +202,7 @@ class CeInfoView(ttk.Frame):
                         case 'Checkbutton':
                             widgetRef.gridAttribute(column, row)
                         case 'TextOrEntry':
-                            if virtualTypeId == 2:
+                            if virtualTypeId in (2, 3):
                                 widgetRef.gridAttribute(
                                     column, row, columnspan=2, rowspan=3
                                 )
@@ -256,19 +265,19 @@ class CeInfoView(ttk.Frame):
             effect = self.app.fTEditor.getEffect(curItem)
             if effect is not None:
                 newVirtualTypeId = virtual_type_id(newType)
-                if newVirtualTypeId in (0, 1, 2):
+                if newVirtualTypeId in (0, 1, 2, 3):
                     parsedHeader = parse_virtual_effect_header(effect.message)
                     currentVirtualTypeId = (
                         parsedHeader[0] if parsedHeader is not None else None
                     )
                     localizedJson = {'group': {}, 'default': ''}
-                    if currentVirtualTypeId in (0, 1, 2):
+                    if currentVirtualTypeId in (0, 1, 2, 3):
                         decoded, parsedJson = decode_virtual_effect_json(parsedHeader[1])
                         if decoded:
                             localizedJson = parsedJson
                     functionName = (
                         parsedHeader[2]
-                        if currentVirtualTypeId in (0, 1, 2)
+                        if currentVirtualTypeId in (0, 1, 2, 3)
                         else generate_virtual_effect_function_name()
                     )
                     effect.effect_type = 55
@@ -288,6 +297,15 @@ class CeInfoView(ttk.Frame):
                                 sendChatAttributes = SendChatAttributes(
                                     displayAttributes.source_player,
                                     displayAttributes.play_sound,
+                                )
+                        elif currentVirtualTypeId == 3:
+                            techAttributes = parse_localized_tech_name_attributes(
+                                effect.message
+                            )
+                            if techAttributes is not None:
+                                sendChatAttributes = SendChatAttributes(
+                                    techAttributes.source_player,
+                                    effect.play_sound == 1,
                                 )
                         if sendChatAttributes is None:
                             sendChatAttributes = SendChatAttributes(
@@ -325,12 +343,21 @@ class CeInfoView(ttk.Frame):
                                         source_player=sendChatAttributes.source_player,
                                         play_sound=sendChatAttributes.play_sound,
                                     )
+                            elif currentVirtualTypeId == 3:
+                                techAttributes = parse_localized_tech_name_attributes(
+                                    effect.message
+                                )
+                                if techAttributes is not None:
+                                    attributes = replace(
+                                        attributes,
+                                        source_player=techAttributes.source_player,
+                                    )
                         effect.message = self.__createLocalizedDisplayInstructionsScript(
                             localizedJson,
                             attributes,
                             functionName,
                         )
-                    else:
+                    elif newVirtualTypeId == 2:
                         unitNameAttributes = (
                             parse_localized_unit_name_attributes(effect.message)
                             if currentVirtualTypeId == 2
@@ -345,6 +372,39 @@ class CeInfoView(ttk.Frame):
                             functionName,
                             localizedJson,
                             unitId,
+                        )
+                    elif newVirtualTypeId == 3:
+                        techAttributes = (
+                            parse_localized_tech_name_attributes(effect.message)
+                            if currentVirtualTypeId == 3
+                            else None
+                        )
+                        sourcePlayer = effect.source_player
+                        if currentVirtualTypeId == 0:
+                            sendChatAttributes = parse_localized_send_chat_attributes(
+                                effect.message
+                            )
+                            if sendChatAttributes is not None:
+                                sourcePlayer = sendChatAttributes.source_player
+                        elif currentVirtualTypeId == 1:
+                            displayAttributes = (
+                                parse_localized_display_instructions_attributes(
+                                    effect.message
+                                )
+                            )
+                            if displayAttributes is not None:
+                                sourcePlayer = displayAttributes.source_player
+                        elif techAttributes is not None:
+                            sourcePlayer = techAttributes.source_player
+                        effect.message = create_localized_tech_name_script(
+                            functionName,
+                            localizedJson,
+                            (
+                                techAttributes.technology
+                                if techAttributes is not None
+                                else effect.technology
+                            ),
+                            sourcePlayer,
                         )
                 else:
                     if newVirtualTypeId is not None:
@@ -365,7 +425,7 @@ class CeInfoView(ttk.Frame):
                         continue
                     if attribute not in legalAttrs:
                         setattr(effect, attribute, defaults[attribute])
-                if newVirtualTypeId in (0, 1, 2):
+                if newVirtualTypeId in (0, 1, 2, 3):
                     effect.string_id = defaults['string_id']
                 self.updateEffectTreeNode(curItem, effect)
             self.app.itemSelect(None)
@@ -946,7 +1006,7 @@ class CeInfoView(ttk.Frame):
         else:
             parsedHeader = parse_virtual_effect_header(effect.message)
             virtualType = parsedHeader[0] if parsedHeader is not None else None
-            if virtualType in (0, 1, 2):
+            if virtualType in (0, 1, 2, 3):
                 _, metadata, functionName = parsedHeader
                 jsonTextValid, localizedJson = decode_virtual_effect_json(metadata)
                 if not jsonTextValid:
@@ -993,7 +1053,7 @@ class CeInfoView(ttk.Frame):
                         functionName,
                         jsonTextValid,
                     )
-                else:
+                elif virtualType == 2:
                     attributes = (
                         parse_localized_unit_name_attributes(effect.message)
                         or UnitNameAttributes(
@@ -1010,6 +1070,26 @@ class CeInfoView(ttk.Frame):
                         functionName,
                         localizedJson,
                         unitId,
+                        jsonTextValid,
+                    )
+                else:
+                    attributes = (
+                        parse_localized_tech_name_attributes(effect.message)
+                        or TechNameAttributes(
+                            effect.technology,
+                            effect.source_player,
+                        )
+                    )
+                    if attribute != 'message':
+                        attributes = replace(
+                            attributes,
+                            **{attribute: value},
+                        )
+                    effect.message = create_localized_tech_name_script(
+                        functionName,
+                        localizedJson,
+                        attributes.technology,
+                        attributes.source_player,
                         jsonTextValid,
                     )
             else:
@@ -1056,7 +1136,7 @@ class CeInfoView(ttk.Frame):
             parsedHeader = parse_virtual_effect_header(effect.message)
             if parsedHeader is not None:
                 virtualType, metadata, _ = parsedHeader
-            if virtualType in (0, 1, 2):
+            if virtualType in (0, 1, 2, 3):
                 decodedMetadata, metadataJson = decode_virtual_effect_json(metadata)
         abstract = abstractEffect(effect)
 
@@ -1109,6 +1189,21 @@ class CeInfoView(ttk.Frame):
                     metadataJson = {'group': {}, 'default': ''}
                 messageText = json.dumps(metadataJson, ensure_ascii=False, indent=4)
                 effectAttributes = ['selected_object_ids', 'message']
+            elif virtualType == 3:
+                virtualAttributes = (
+                    parse_localized_tech_name_attributes(effect.message)
+                    or TechNameAttributes(
+                        effect.technology,
+                        effect.source_player,
+                    )
+                )
+                if not decodedMetadata:
+                    metadataJson = {'group': {}, 'default': ''}
+                messageText = json.dumps(metadataJson, ensure_ascii=False, indent=4)
+                effectAttributes = [
+                    attribute for attribute in CeAttributes.effect().get(65, [])
+                    if attribute != 'string_id'
+                ]
             else:
                 virtualAttributes = None
                 effectAttributes = CeAttributes.effect().get(effect.effect_type, [])
@@ -1117,7 +1212,7 @@ class CeInfoView(ttk.Frame):
             effectAttributes = CeAttributes.effect().get(effect.effect_type, [])
         for attribute in effectAttributes:
             try:
-                if attribute == 'message' and virtualType in (0, 1, 2):
+                if attribute == 'message' and virtualType in (0, 1, 2, 3):
                     value = messageText
                 elif attribute == 'selected_object_ids' and virtualType == 2:
                     value = (

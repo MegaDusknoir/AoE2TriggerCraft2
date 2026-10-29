@@ -14,6 +14,8 @@ from VirtualEffects import (
     parse_localized_display_instructions,
     parse_localized_send_chat_attributes,
     parse_localized_send_chat,
+    parse_localized_tech_name,
+    parse_localized_tech_name_attributes,
     parse_localized_unit_name,
     parse_localized_unit_name_attributes,
     validate_localized_effect_json,
@@ -239,6 +241,30 @@ def getVirtualEffectAbstract(script, virtualEffectType):
             )
             formatString = TEXT['effectDescriptionFormat'][VIRTUAL_EFFECT_TYPE_ID_BASE + virtualEffectType]
             return formatString.format(target, getMessageAbstract(data['default']))
+    elif virtualEffectType == 3:
+        parsedVirtualEffect = parse_localized_tech_name(script)
+        if parsedVirtualEffect is not None:
+            _, decoded, data = parsedVirtualEffect
+            if not decoded or not validate_localized_effect_json(data):
+                formatString = TEXT['effectDescriptionFormatShift'][100000]
+                return formatString.format(virtualEffectType)
+            techAttributes = parse_localized_tech_name_attributes(script)
+            player = (
+                techAttributes.source_player
+                if techAttributes is not None else -1
+            )
+            technology = (
+                techAttributes.technology
+                if techAttributes is not None else -1
+            )
+            formatString = TEXT['effectDescriptionFormat'][
+                VIRTUAL_EFFECT_TYPE_ID_BASE + virtualEffectType
+            ]
+            return formatString.format(
+                getPlayerAbstract(player),
+                getTechnologyAbstract(technology),
+                getMessageAbstract(data['default']),
+            )
     else:
         return formatString.format(virtualEffectType)
 
