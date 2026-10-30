@@ -98,6 +98,7 @@ def getUnitListName(unitList: int) -> str:
 
 def getUnitListGroupTypeAbstract(unitList: int, unitGroup: int,
                                  unitType: int) -> str:
+    # 多数效果的判定优先级：Unit > Group > Type
     if unitList != -1:
         return getUnitListName(unitList)
     elif unitGroup != -1:
@@ -106,6 +107,18 @@ def getUnitListGroupTypeAbstract(unitList: int, unitGroup: int,
         return TEXT['datasetObjectType'].get(unitType, f'<UT{unitType}>')
     else:
         return TEXT['fmtStringAnyUnit']
+def getUnitGroup2Type2Abstract(unitGroup: int,
+                               unitType: int) -> str:
+    # 个别效果特有的判定：对Group和Type取交集
+    if unitGroup == -1:
+        return TEXT['datasetObjectType'].get(unitType, f'<UT{unitType}>')
+    elif unitType == -1:
+        return TEXT['datasetObjectClass'].get(unitGroup, f'<UG{unitGroup}>')
+    else:
+        return TEXT['fmtStringGroupTypeCombineFormat'].format(
+            TEXT['datasetObjectType'].get(unitType, f'<UT{unitType}>'),
+            TEXT['datasetObjectClass'].get(unitGroup, f'<UG{unitGroup}>')
+        )
 def getNonSpecificUnitAbstract(unitList: int, unitGroup: int,
                                unitType: int, unitPlayer: int=None,
                                unit: int | list[int]=None,
@@ -438,6 +451,17 @@ def abstractCondition(condition: Condition) -> str:
                     else:
                         triggerName = '<-1>'
                     return formatString.format(triggerName)
+                case ConditionId.LOCAL_TECH_RESEARCHED:
+                    return formatString.format(
+                        getNonSpecificUnitAbstract(-1,-1,
+                                                   -1,condition.source_player,
+                                                   condition.unit_object,
+                                                   condition.area_x1, condition.area_y1,
+                                                   condition.area_x2, condition.area_y2,
+                                                   allowAreaEmpty=True),
+                        condition.quantity,
+                        TEXT['datasetLocalTechnology'][condition.local_technology]
+                        )
                 case _:
                     return getConditionName(condition.condition_type)
         except UnsupportedAttributeError as e:
@@ -782,23 +806,7 @@ def abstractEffect(effect: Effect) -> str:
                 case EffectId.ACKNOWLEDGE_AI_SIGNAL:
                     return formatString.format(effect.ai_signal_value)
                 case EffectId.MODIFY_ATTRIBUTE:
-                    unitConst = effect.object_list_unit_id if effect.object_list_unit_id != -1 else effect.item_id
-                    value = effect.quantity if effect.object_attributes not in [8,9] else effect.armour_attack_quantity
-                    if effect.object_attributes == 50 and effect.quantity == 0:
-                        formatString = TEXT['effectDescriptionFormatShift'][2]
-                        return formatString.format(getPlayerAbstract(effect.source_player),
-                                                getUnitListName(unitConst),
-                                                getAttributesAbstract(effect.object_attributes,
-                                                                        effect.armour_attack_class),
-                                                getMessageAbstract(effect.message),
-                                                TEXT['datasetOperation'][effect.operation])
-                    else:
-                        return formatString.format(getPlayerAbstract(effect.source_player),
-                                                getUnitListName(unitConst),
-                                                getAttributesAbstract(effect.object_attributes,
-                                                                        effect.armour_attack_class),
-                                                value,
-                                                TEXT['datasetOperation'][effect.operation])
+                    return _abstractComplexEffect(effect, formatString)
                 case EffectId.MODIFY_RESOURCE:
                     return formatString.format(getPlayerAbstract(effect.source_player),
                                             getResourceAbstract(effect.tribute_list),
@@ -1051,6 +1059,45 @@ def abstractEffect(effect: Effect) -> str:
                                                                         effect.area_x1, effect.area_y1,
                                                                         effect.area_x2, effect.area_y2,
                                                                         allowAreaEmpty=True))
+                case EffectId.ADD_TRAIN_LOCATION:
+                    return formatString.format(getPlayerAbstract(effect.source_player),
+                                               getUnitListName(effect.object_list_unit_id),
+                                               getUnitListName(effect.object_list_unit_id_2),
+                                               effect.button_location)
+                case EffectId.RESEARCH_LOCAL_TECHNOLOGY:
+                    return formatString.format(
+                        getNonSpecificUnitAbstract(effect.object_list_unit_id_2, -1,
+                                                   -1, effect.source_player,
+                                                   effect.selected_object_ids,
+                                                   effect.area_x1, effect.area_y1,
+                                                   effect.area_x2, effect.area_y2,
+                                                   allowAreaEmpty=True),
+                        TEXT['datasetLocalTechnology'][effect.local_technology])
+                case EffectId.MODIFY_ATTRIBUTE_FOR_CLASS:
+                    return _abstractComplexEffect(effect, formatString)
+                case EffectId.MODIFY_OBJECT_ATTRIBUTE:
+                    return _abstractComplexEffect(effect, formatString)
+                case EffectId.MODIFY_OBJECT_ATTRIBUTE_BY_VARIABLE:
+                    return _abstractComplexEffect(effect, formatString)
+                case EffectId.CHANGE_OBJECT_VISIBILITY:
+                    return formatString.format(
+                        getNonSpecificUnitAbstract(-1, -1,
+                                                   -1, effect.source_player,
+                                                   effect.selected_object_ids,
+                                                   effect.area_x1, effect.area_y1,
+                                                   effect.area_x2, effect.area_y2,
+                                                   allowAreaEmpty=True),
+                        getPlayerAbstract(effect.target_player),
+                        TEXT['datasetVisibilityState'][effect.visibility_state]
+                    )   
+                case EffectId.BUILD_OBJECT:
+                    return formatString
+                case EffectId.MIRROR_DIPLOMACY:
+                    return formatString.format(
+                        getPlayerAbstract(effect.source_player),
+                        getPlayerAbstract(effect.target_player),
+                        TEXT['fmtDisable'] if effect.enabled == 0 else TEXT['fmtEnable']
+                    )
                 case _:
                     return getEffectName(effect.effect_type)
         except UnsupportedAttributeError as e:
@@ -1061,3 +1108,70 @@ def abstractEffect(effect: Effect) -> str:
             return getEffectName(effect.effect_type)
     else:
         return getEffectName(effect.effect_type)
+
+def _abstractComplexEffect(effect: Effect, formatString: str) -> str:
+    match effect.effect_type:
+        case EffectId.MODIFY_ATTRIBUTE:
+            unitConst = effect.object_list_unit_id if effect.object_list_unit_id != -1 else effect.item_id
+            value = effect.quantity if effect.object_attributes not in [8,9] else effect.armour_attack_quantity
+            if effect.object_attributes == 50 and effect.quantity == 0:
+                formatString = TEXT['effectDescriptionFormatShift'][2]
+                return formatString.format(getPlayerAbstract(effect.source_player),
+                                        getUnitListName(unitConst),
+                                        getAttributesAbstract(effect.object_attributes,
+                                                                effect.armour_attack_class),
+                                        getMessageAbstract(effect.message),
+                                        TEXT['datasetOperation'][effect.operation])
+            else:
+                return formatString.format(getPlayerAbstract(effect.source_player),
+                                        getUnitListName(unitConst),
+                                        getAttributesAbstract(effect.object_attributes,
+                                                                effect.armour_attack_class),
+                                        value,
+                                        TEXT['datasetOperation'][effect.operation])
+        case EffectId.MODIFY_ATTRIBUTE_FOR_CLASS:
+            value = effect.quantity if effect.object_attributes not in [8,9] else effect.armour_attack_quantity
+            if effect.object_attributes == 50 and effect.quantity == 0:
+                formatString = TEXT['effectDescriptionFormatShift'][2]
+                value = getMessageAbstract(effect.message)
+            return formatString.format(
+                getPlayerAbstract(effect.source_player),
+                getUnitGroup2Type2Abstract(
+                    effect.object_group2,
+                    effect.object_type2),
+                getAttributesAbstract(effect.object_attributes,
+                                        effect.armour_attack_class),
+                value,
+                TEXT['datasetOperation'][effect.operation]
+                )
+        case EffectId.MODIFY_OBJECT_ATTRIBUTE:
+            # effect.object_filter
+            value = effect.quantity if effect.object_attributes not in [8,9] else effect.armour_attack_quantity
+            if effect.object_attributes == 50 and effect.quantity == 0:
+                formatString = TEXT['effectDescriptionFormatShift'][2]
+                value = getMessageAbstract(effect.message)
+            return formatString.format(getNonSpecificUnitAbstract(effect.object_list_unit_id, -1,
+                                                                -1, effect.source_player,
+                                                                effect.selected_object_ids,
+                                                                effect.area_x1, effect.area_y1,
+                                                                effect.area_x2, effect.area_y2,
+                                                                allowAreaEmpty=True),
+                                    getAttributesAbstract(effect.object_attributes,
+                                                            effect.armour_attack_class),
+                                    value,
+                                    TEXT['datasetOperation'][effect.operation]
+                                    )
+        case EffectId.MODIFY_OBJECT_ATTRIBUTE_BY_VARIABLE:
+            return formatString.format(getNonSpecificUnitAbstract(effect.object_list_unit_id, -1,
+                                                                -1, effect.source_player,
+                                                                effect.selected_object_ids,
+                                                                effect.area_x1, effect.area_y1,
+                                                                effect.area_x2, effect.area_y2,
+                                                                allowAreaEmpty=True),
+                                    getAttributesAbstract(effect.object_attributes,
+                                                            effect.armour_attack_class),
+                                    effect.variable,
+                                    TEXT['datasetOperation'][effect.operation]
+                                    )
+        case _:
+            raise ValueError('Unexpected type')

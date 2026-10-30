@@ -52,6 +52,8 @@
     "menuDuplicateIncludeSource": "Include Source",
     "menuDuplicateIncludeTarget": "Include Target",
     "menuDuplicateIncludeStrict": "Strict",
+    "menuDuplicateChangeMessageColor": "Change Message Color",
+    "menuDuplicateChangeVirtualEffects": "Change Virtual Effects",
     "menuDuplicateUseUnitDuplicateMappings": "Use Unit Mappings",
     "menuDuplicateUseTileAreaDuplicateMappings": "Use Tile/Area Mappings",
     "menuDuplicateAddDuplicateMark": "Add Duplicate Mark",
@@ -324,6 +326,7 @@
     "fmtStringAreaUnitCombineFormat": "{1} in {0}",
     "fmtStringPlayerUnitCombineFormat": "{0}'s {1}",
     "fmtStringStateUnitCombineFormat": "{0} {1}",
+    "fmtStringGroupTypeCombineFormat": "{1} in {0}",
     "fmtStringIf": "If",
     "fmtStringNot": "Not",
     "fmtStringPlayerN": "Player {0}",
@@ -369,7 +372,8 @@
         "76": "{0}'s {1} attacked {2} ({3})",
         "77": "{0}'s hero power casted",
         "78": "Variable {0} {2} {1}",
-        "79": "Activated \"{0}\""
+        "79": "Activated \"{0}\"",
+        "80": "Not less than {1} in {0} researched {2}"
     },
     "conditionDescriptionInvertFormat": {
         "1": "Not bring {0} to {1}",
@@ -401,7 +405,8 @@
         "75": "Decision {0} not triggerd ({1})",
         "76": "{0}'s {1} not attacked {2} ({3})",
         "78": "Variable {0} not {2} {1}",
-        "79": "Not activated \"{0}\""
+        "79": "Not activated \"{0}\"",
+        "80": "Less than {1} in {0} researched {2}"
     },
     "effectAttributeName": {
         "effect_type": "Effect Type",
@@ -728,6 +733,14 @@
         "99": "Enable {0} attackable",
         "100": "Variable {0} {2} Variable {1}",
         "101": "Variable {0} set to amount of {1}",
+        "102": "Add train location of {0}'s {1} in {2} ({3})",
+        "103": "Research {1} in {0}",
+        "104": "Make {2} of {0}'s {1} {4} {3}",
+        "105": "Make {1} of {0} {3} {2}",
+        "106": "Make {1} of {0} {3} Variable {2}",
+        "107": "{0} {2} to {1}",
+        "108": "Build Object",
+        "109": "{2} {0}'s diplomacy following to {1}",
         "100000": "Send {0} localized \"{1}\"",
         "100001": "Display localized \"{0}\"",
         "100002": "Set {0}'s name to localized \"{1}\"",

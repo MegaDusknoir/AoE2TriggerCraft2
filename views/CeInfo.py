@@ -241,12 +241,16 @@ class CeInfoView(ttk.Frame):
             curItem = self.tl.focus()
             condition = self.app.fTEditor.getCondition(curItem)
             if condition is not None:
+                oldType = condition.condition_type
                 condition.condition_type = newType
                 # Reset illegal condition attr
+                oldLegalAttrs = CeAttributes.condition().get(oldType, [])
                 legalAttrs = CeAttributes.condition().get(condition.condition_type, [])
                 defaults = CeAttributes.conditionDefaults().get(condition.condition_type, {})
                 for attribute in defaults:
                     if attribute not in legalAttrs:
+                        setattr(condition, attribute, defaults[attribute])
+                    elif attribute not in oldLegalAttrs:
                         setattr(condition, attribute, defaults[attribute])
 
                 self.updateConditionTreeNode(curItem, condition)
@@ -264,6 +268,7 @@ class CeInfoView(ttk.Frame):
             curItem = self.tl.focus()
             effect = self.app.fTEditor.getEffect(curItem)
             if effect is not None:
+                oldType = effect.effect_type
                 newVirtualTypeId = virtual_type_id(newType)
                 if newVirtualTypeId in (0, 1, 2, 3):
                     parsedHeader = parse_virtual_effect_header(effect.message)
@@ -418,12 +423,15 @@ class CeInfoView(ttk.Frame):
                             ]
                     effect.effect_type = newType
                 # Reset illegal effect attr
+                oldLegalAttrs = CeAttributes.effect().get(oldType, [])
                 legalAttrs = CeAttributes.effect().get(effect.effect_type, [])
                 defaults = CeAttributes.effectDefaults().get(effect.effect_type, {})
                 for attribute in defaults:
                     if attribute == 'quantity' and 'armour_attack_quantity' in legalAttrs:
                         continue
                     if attribute not in legalAttrs:
+                        setattr(effect, attribute, defaults[attribute])
+                    elif attribute not in oldLegalAttrs and attribute != 'message':
                         setattr(effect, attribute, defaults[attribute])
                 if newVirtualTypeId in (0, 1, 2, 3):
                     effect.string_id = defaults['string_id']

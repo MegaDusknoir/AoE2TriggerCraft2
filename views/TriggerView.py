@@ -128,6 +128,8 @@ class TriggerView(ttk.Frame):
                                             command=lambda: __setCbDuplicateIncludeLimit('includeTarget'))
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateIncludeStrict'], variable=self.app.options.changeFromPlayerOnly)
                 menuDuplicate.add_separator()
+                menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateChangeMessageColor'], variable=self.app.options.changeMessageColor)
+                menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateChangeVirtualEffects'], variable=self.app.options.changeVirtualEffects)
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateUseUnitDuplicateMappings'], variable=self.app.options.useUnitDuplicateMappings)
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateUseTileAreaDuplicateMappings'], variable=self.app.options.useTileAreaDuplicateMappings)
                 menuDuplicate.add_separator()

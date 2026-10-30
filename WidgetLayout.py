@@ -122,6 +122,6 @@ EFFECT_WIDGET_FORM = {
     "wall_y1": ('null',-1,-1,int),
     "wall_x2": ('null',-1,-1,int),
     "wall_y2": ('null',-1,-1,int),
-    "object_filter": ('Combobox',3,2,int),
+    "object_filter": ('Combobox',3,0,int),
     "use_tag_color_for_icon": ('Checkbutton',0,1,int),
 }
