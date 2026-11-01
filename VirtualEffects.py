@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 VIRTUAL_EFFECT_TYPE_ID_BASE = 100000
+TRIGGER_CRAFT_METADATA_HEADER = '<TriggerCraftMetadata>'
 
 _VIRTUAL_EFFECT_MARKER_RE = re.compile(
     r'\A/\*<TriggerCraftVirtualType:(?P<virtual_type_id>\d+)>\*/'
@@ -261,8 +262,38 @@ def decode_virtual_effect_json(
         if len(json_bytes) > 1_048_576 or not decompressor.eof or decompressor.unused_data:
             return False, None
         return True, strict_json_loads(json_bytes.decode('utf-8'))
-    except (Base64DecodeError, UnicodeDecodeError, ValueError, zlib.error):
+    except (
+        Base64DecodeError,
+        UnicodeDecodeError,
+        ValueError,
+        RecursionError,
+        zlib.error,
+    ):
         return False, None
+
+
+def encode_trigger_metadata_description(data: object) -> str:
+    return (
+        TRIGGER_CRAFT_METADATA_HEADER
+        + '<'
+        + encode_virtual_effect_json(data)
+        + '>'
+    )
+
+
+def decode_trigger_metadata_description(
+    description: str | None,
+) -> tuple[bool, object | None]:
+    if not isinstance(description, str) or not description.startswith(
+        TRIGGER_CRAFT_METADATA_HEADER
+    ):
+        return False, None
+
+    payload = description[len(TRIGGER_CRAFT_METADATA_HEADER):]
+    if not payload.startswith('<') or not payload.endswith('>'):
+        return False, None
+
+    return decode_virtual_effect_json(payload[1:-1])
 
 
 def parse_virtual_effect_script(
@@ -682,6 +713,7 @@ def transform_virtual_effect_all_in_one(
     to_player: int,
     include_player_source: bool = False,
     change_from_player_only: bool = False,
+    change_self_excluding: bool = False,
     color_tag_mapping: list[str] = None,
     unit_mappings: list[list[int]] = [],
 ) -> str | None:
@@ -731,6 +763,9 @@ def transform_virtual_effect_all_in_one(
         ):
             source_player = to_player
             recreate = True
+        elif change_self_excluding and source_player == to_player:
+            source_player = from_player
+            recreate = True
         if color_tag_mapping:
             if change_color_tag(data):
                 recreate = True
@@ -751,6 +786,9 @@ def transform_virtual_effect_all_in_one(
             not change_from_player_only or attributes.source_player == from_player
         ):
             source_player = to_player
+            recreate = True
+        elif change_self_excluding and source_player == to_player:
+            source_player = from_player
             recreate = True
         if color_tag_mapping:
             if change_color_tag(data):
@@ -799,6 +837,9 @@ def transform_virtual_effect_all_in_one(
             not change_from_player_only or attributes.source_player == from_player
         ):
             source_player = to_player
+            recreate = True
+        elif change_self_excluding and source_player == to_player:
+            source_player = from_player
             recreate = True
         if color_tag_mapping:
             if change_color_tag(data):

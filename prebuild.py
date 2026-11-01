@@ -123,6 +123,7 @@ def createOptionsDefine(csvPath, outPath):
             options[option] = {'type': option_type,
                                'default': option_default,
                                'showInPreferences': ast.literal_eval(row['ShowInPreferences']),
+                               'globalOnly': ast.literal_eval(row['GlobalOnly']),
                                'grid': ast.literal_eval(row['Grid']),
                                'columnSpan': int(row['ColumnSpan'])
                                }

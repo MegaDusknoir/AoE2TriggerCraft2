@@ -53,6 +53,8 @@ from views.CeInfo import CeInfoView
 from views.MappingEditor import MappingEditor
 from Util import DebugTimeCount, ScenarioVersion
 from VirtualEffects import (
+    decode_trigger_metadata_description,
+    encode_trigger_metadata_description,
     ensure_unique_virtual_effect_function_names,
     parse_localized_display_instructions,
     parse_localized_send_chat,
@@ -469,6 +471,12 @@ class TCWindow():
         self.root.mainloop()
         if self.restartToLoad != None:
             raise self.LoadingDifferentVersionException(self.restartToLoad)
+
+    def getLocalOption(self, attr):
+        if hasattr(self.scenOptions, attr):
+            return getattr(self.scenOptions, attr)
+        else:
+            return getattr(self.options, attr)
 
     def generateDefaultScenario(self):
         if DEFAULT_VERSION != self.editorVersion:
@@ -1100,7 +1108,7 @@ class TCWindow():
                                        filetypes=[('JSON', '*.json'), (TEXT['typeNameAll'], '*')])
         if openFilePath:
             try:
-                self.scenOptions.load(openFilePath)
+                self.scenOptions.mappings.loadf(openFilePath)
             except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
                 messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
             except jsonschema.ValidationError as e:
@@ -1127,7 +1135,7 @@ class TCWindow():
             saveFilePath += '.json'
 
         try:
-            self.scenOptions.save(saveFilePath)
+            self.scenOptions.mappings.save(saveFilePath)
         except Exception as e:
             messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
         else:
@@ -1182,6 +1190,27 @@ class TCWindow():
             return False
 
     def __saveScen(self, path):
+        metadataTrigger = self.fTEditor.searchTriggerMetadataContainer()
+        if self.scenOptions and metadataTrigger is None:
+            if self.options.defaultToSavingMetadata.get():
+                createContainer = True
+            else:
+                createContainer = messagebox.askyesnocancel(
+                    title=TEXT['titleScenarioMetadata'],
+                    message=TEXT['messageScenarioMetadataMissing'],
+                    icon='question',
+                    default='yes',
+                )
+            if createContainer is None:
+                return False
+            if createContainer:
+                metadataTrigger = self.fTEditor.createMetadataContainer()
+
+        if metadataTrigger is not None:
+            metadataTrigger.description = encode_trigger_metadata_description(
+                self.scenOptions.dump()
+            )
+
         try:
             ensure_unique_virtual_effect_function_names(
                 self.activeScenario.trigger_manager
@@ -1199,6 +1228,7 @@ class TCWindow():
             raise e
         else:
             self.statusBarMessage(TEXT['noticeScenarioSaved'])
+            return True
 
     def saveScenario(self, path=None):
         if path == None:
@@ -1210,8 +1240,10 @@ class TCWindow():
                 scenFolder, scenName = os.path.split(self.openedScenPath)
                 self.windowTitleTail = scenName
                 self.root.title(f"{TEXT['titleMainWindow']} - [{self.windowTitleTail}]")
+                return True
+            return False
         else:
-            self.__saveScen(path)
+            return self.__saveScen(path)
 
     def saveAsScenario(self) -> str:
         saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveScenario'],
@@ -1220,8 +1252,9 @@ class TCWindow():
             scenName, scenExt = os.path.splitext(saveFilePath)
             if scenExt == '' and os.path.isfile(saveFilePath) == False:
                 saveFilePath += '.aoe2scenario'
-            self.__saveScen(saveFilePath)
-        return saveFilePath
+            if self.__saveScen(saveFilePath):
+                return saveFilePath
+        return ''
 
     def readScenarioVersion(self, path):
         with open(path, 'rb') as f:
@@ -1336,8 +1369,24 @@ class TCWindow():
         self.windowTitleTail = name
         self.openedScenPath = path
         self.triggerManager = self.activeScenario.trigger_manager
+        self.__loadScenarioMetadata()
         self.readScenario()
         print(f'Loaded {name}')
+
+    def __loadScenarioMetadata(self):
+        trigger = self.fTEditor.searchTriggerMetadataContainer()
+        if trigger is None:
+            return
+
+        valid, metadata = decode_trigger_metadata_description(trigger.description)
+        if not valid:
+            messagebox.showerror(
+                title=TEXT['titleScenarioMetadata'],
+                message=TEXT['messageScenarioMetadataCorrupted'],
+            )
+            return
+
+        self.scenOptions.load(metadata)
 
     def openScenarioAskFile(self):
         openFilePath = askopenfilename(title=TEXT['titleSelectScenario'],
@@ -1351,6 +1400,7 @@ class TCWindow():
         self.fMapViewTab.loadMapView()
         self.fDisablesViewTab.loadScen()
         self.fUEditor.updatePlayerList()
+        self.fMappingEditor.loadConfig()
         self.statusBarMessage(TEXT['noticeScenarioLoaded'])
 
     def newScenario(self):

@@ -19,6 +19,7 @@
     "namePreferences": {
         "enableOverwritingSource": "Enable Overwriting Source Scenario",
         "createBackupWhenOverwritingSource": "Create Backup When Overwriting Source",
+        "defaultToSavingMetadata": "Default to Auto Create Metadata Container",
         "includeSource": "Include Source",
         "includeTarget": "Include Target",
         "changeFromPlayerOnly": "Change From-Player Only",
@@ -28,11 +29,13 @@
         "useUnitDuplicateMappings": "Use Unit Mappings",
         "useTileAreaDuplicateMappings": "Use Tile/Area Mappings",
         "changeMessageColor": "Change Message Color",
-        "changeVirtualEffects": "Change Virtual Effects"
+        "changeVirtualEffects": "Change Virtual Effects",
+        "changeSelfExcluding": "Change Self-Excluding Patterns"
     },
     "descPreferences": {
         "enableOverwritingSource": "Allow you to Save (Ctrl+S) the scenario to overwrite itself, make sure you have a backup.",
         "createBackupWhenOverwritingSource": "Auto create backups when overwriting source scenario.",
+        "defaultToSavingMetadata": "Auto create Metadata Container trigger, if there is unsaved metadata when saving and no container exists.",
         "includeSource": "Allow Source Player attributes to be changed while duplicating.",
         "includeTarget": "Allow Target Player attributes to be changed while duplicating.",
         "changeFromPlayerOnly": "Only change player attributes that are equal to origin.",
@@ -42,7 +45,8 @@
         "useUnitDuplicateMappings": "Mapping predefined object in trigger to others while duplicating.",
         "useTileAreaDuplicateMappings": "Mapping predefined tile/area in trigger to others while duplicating.",
         "changeMessageColor": "Allow color tags in message effects to be changed while duplicating.",
-        "changeVirtualEffects": "Allow Player attributes in Virtual Effects to be changed while duplicating."
+        "changeVirtualEffects": "Allow Player attributes in Virtual Effects to be changed while duplicating.",
+        "changeSelfExcluding": "Allow patterns like 7-to-1, 1-to-7 to be transformed."
     },
     "menuLanguage": "Language",
     "menuHelp": "Help",
@@ -52,6 +56,7 @@
     "menuDuplicateIncludeSource": "Include Source",
     "menuDuplicateIncludeTarget": "Include Target",
     "menuDuplicateIncludeStrict": "Strict",
+    "menuDuplicateChangeSelfExcluding": "Change Self-Excluding Patterns",
     "menuDuplicateChangeMessageColor": "Change Message Color",
     "menuDuplicateChangeVirtualEffects": "Change Virtual Effects",
     "menuDuplicateUseUnitDuplicateMappings": "Use Unit Mappings",
@@ -90,6 +95,9 @@
     "titleSavefailed": "Save Failed",
     "messageSavefailed": "Can not save scenario, reason:\n{0}",
     "messageSavefailedByBadInteger": "One or more integer values are set too big to save.",
+    "titleScenarioMetadata": "Scenario Metadata",
+    "messageScenarioMetadataCorrupted": "The scenario metadata is corrupted. Will continue without metadata.",
+    "messageScenarioMetadataMissing": "There is unsaved metadata but no metadata container in scenario.\n\nMetadata container is a empty trigger used to store configurations. Upon the next load, Trigger Craft can retrieve the stored configurations from it.\n\n\"Yes\" to create,\n\"No\" to ignore,\n\"Cancel\" to stop saving.",
     "messageTitleWarning": "Warning",
     "messageWarningDeduplicateNotMatch": "The selected item is not similar to items below,\n\nAre you sure to continue?",
     "titleSelectSaveScenario": "Open",

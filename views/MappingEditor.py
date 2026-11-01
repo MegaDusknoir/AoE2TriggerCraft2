@@ -31,17 +31,21 @@ class MappingTreeView(ttk.Treeview):
 
 class MappingEditor(ttk.Frame):
     @property
-    def ml(self):
+    def mp(self):
+        return self.app.scenOptions.mappings
+
+    @property
+    def ml(self)-> MappingTreeView:
         return self.tvMappingList
 
     @property
     def mappingsRef(self):
         if self.mappingType == 'unit':
-            return self.app.scenOptions.unitDuplicateMappings
+            return self.mp.unitDuplicateMappings
         elif self.mappingType == 'tile':
-            return self.app.scenOptions.tileDuplicateMappings
+            return self.mp.tileDuplicateMappings
         elif self.mappingType == 'area':
-            return self.app.scenOptions.areaDuplicateMappings
+            return self.mp.areaDuplicateMappings
 
     def loadConfig(self):
         self.loadMappingList()
@@ -224,6 +228,10 @@ class MappingEditor(ttk.Frame):
 
     class MappingValueButton(ttk.Frame):
         @property
+        def mp(self):
+            return self.outer.scenOptions.mappings
+
+        @property
         def ml(self):
             return self.outer.fMappingEditor.tvMappingList
 
@@ -333,13 +341,13 @@ class MappingEditor(ttk.Frame):
                 return
             id = self.ml.getNodeId(curItem)
             if self.mappingType == 'area':
-                self.outer.scenOptions.areaDuplicateMappings[id]["mapping"][self.player] = self.variable.get()
+                self.mp.areaDuplicateMappings[id]["mapping"][self.player] = self.variable.get()
             elif self.mappingType == 'tile':
-                self.outer.scenOptions.tileDuplicateMappings[id]["mapping"][self.player] = self.variable.get()
+                self.mp.tileDuplicateMappings[id]["mapping"][self.player] = self.variable.get()
 
         def __modifyUnit(self):
             curItem = self.ml.focus()
             if not curItem:
                 return
             id = self.ml.getNodeId(curItem)
-            self.outer.scenOptions.unitDuplicateMappings[id]["mapping"][self.player] = self.variable.get()[0]
+            self.mp.unitDuplicateMappings[id]["mapping"][self.player] = self.variable.get()[0]

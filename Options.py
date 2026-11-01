@@ -57,7 +57,7 @@ class GlobalOptions():
             getattr(self, attr).set(value)
             self.dump(self._configPath)
 
-class ScenarioOptions():
+class MappingOptions():
     schema = {
         "type": "object",
         "properties": {
@@ -146,27 +146,31 @@ class ScenarioOptions():
         self.tileDuplicateMappings: list[dict] = []
         self.areaDuplicateMappings: list[dict] = []
 
-    def load(self, file):
+    def loadf(self, file):
         with open(file, 'r', encoding='utf-8') as f:
             cfg = json.load(f)
         jsonschema.validate(cfg, self.schema)
+        self.load(cfg)
 
+    def load(self, mappings: dict):
         self.unitDuplicateMappings = []
         self.tileDuplicateMappings = []
         self.areaDuplicateMappings = []
-        for mappingItem in cfg["unitDuplicateMappings"]:
+        # json中的映射不含盖亚及未定义玩家，区域采用2层2坐标
+        # 内存中的映射固定盖亚+8位，区域采用1层4坐标
+        for mappingItem in mappings.get("unitDuplicateMappings", {}):
             mappingItem["mapping"].extend([-1] * (8 - len(mappingItem["mapping"])))
             self.unitDuplicateMappings.append({"name": mappingItem["name"], "mapping": [-1] + mappingItem["mapping"]})
-        for mappingItem in cfg["tileDuplicateMappings"]:
+        for mappingItem in mappings.get("tileDuplicateMappings", {}):
             mappingItem["mapping"].extend([[-1,-1]] * (8 - len(mappingItem["mapping"])))
             self.tileDuplicateMappings.append({"name": mappingItem["name"], "mapping": [[-1,-1]] + mappingItem["mapping"]})
-        for mappingItem in cfg["areaDuplicateMappings"]:
+        for mappingItem in mappings.get("areaDuplicateMappings", {}):
             for i, area in enumerate(mappingItem["mapping"]):
                 mappingItem["mapping"][i] = [*area[0], *area[1]]
             mappingItem["mapping"].extend([[-1,-1,-1,-1]] * (8 - len(mappingItem["mapping"])))
             self.areaDuplicateMappings.append({"name": mappingItem["name"], "mapping": [[-1,-1,-1,-1]] + mappingItem["mapping"]})
-            
-    def save(self, file):
+
+    def dump(self) -> dict:
         dump = {
             "unitDuplicateMappings": [],
             "tileDuplicateMappings": [],
@@ -179,8 +183,67 @@ class ScenarioOptions():
         for mappingItem in self.areaDuplicateMappings:
             dump["areaDuplicateMappings"].append({"name": mappingItem["name"],
                                                   "mapping": [[[a[0],a[1]],[a[2],a[3]]] for a in mappingItem["mapping"][1:]]})
+        return dump
+
+    def __bool__(self):
+        return bool(
+            self.unitDuplicateMappings
+            or self.tileDuplicateMappings
+            or self.areaDuplicateMappings
+            )
+
+    def save(self, file):
+        dump = self.dump()
+
         try:
             with open(file, 'w', encoding='utf-8') as f:
                 json.dump(dump, f, indent=4, ensure_ascii=False)
         except PermissionError:
             pass
+
+class ScenarioOptions():
+    def __init__(self):
+        self.mappings = MappingOptions()
+
+    def load(self, options: dict):
+        self.mappings.load(options.get('Mappings', {}))
+
+        for option, args in OPTIONS_DEFINE.items():
+            if not args['globalOnly']:
+                if option in options.get('LocalOptions', {}):
+                    match args['type']:
+                        case 'string':
+                            optionType = ttk.StringVar
+                        case 'boolean':
+                            optionType = ttk.BooleanVar
+                        case 'integer':
+                            optionType = ttk.IntVar
+                        case 'float':
+                            optionType = ttk.DoubleVar
+                        case _:
+                            optionType = ttk.Variable
+                    setattr(self, option, optionType(options[option]))
+
+    def dump(self) -> dict:
+        dump = {
+            'LocalOptions': {},
+            "Mappings": {},
+        }
+        dump["Mappings"] = self.mappings.dump()
+
+        for option, args in OPTIONS_DEFINE.items():
+            if not args['globalOnly']:
+                if hasattr(self, option):
+                    dump['LocalOptions'][option] = getattr(self, option).get()
+        return dump
+
+    def __bool__(self):
+        empty = True
+        for option, args in OPTIONS_DEFINE.items():
+            if not args['globalOnly']:
+                if hasattr(self, option):
+                    empty = False
+                    break
+        if self.mappings:
+            empty = False
+        return not empty

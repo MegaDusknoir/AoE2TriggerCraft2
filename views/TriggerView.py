@@ -17,7 +17,7 @@ from Localization import TEXT
 from TriggerAbstract import *
 from Util import Tooltip, ValueSelectButton
 from CeAttributesManager import CeAttributes
-from VirtualEffects import transform_virtual_effect_all_in_one
+from VirtualEffects import TRIGGER_CRAFT_METADATA_HEADER, transform_virtual_effect_all_in_one
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -97,6 +97,8 @@ class TriggerTreeView(ttk.Treeview):
             parent = item
         return parent
 
+TRIGGER_METADATA_DESCRIPTION_ORDER = 16777215
+
 class TriggerView(ttk.Frame):
     @property
     def tm(self):
@@ -127,6 +129,7 @@ class TriggerView(ttk.Frame):
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateIncludeTarget'], variable=self.app.options.includeTarget,
                                             command=lambda: __setCbDuplicateIncludeLimit('includeTarget'))
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateIncludeStrict'], variable=self.app.options.changeFromPlayerOnly)
+                menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateChangeSelfExcluding'], variable=self.app.options.changeSelfExcluding)
                 menuDuplicate.add_separator()
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateChangeMessageColor'], variable=self.app.options.changeMessageColor)
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateChangeVirtualEffects'], variable=self.app.options.changeVirtualEffects)
@@ -166,7 +169,7 @@ class TriggerView(ttk.Frame):
             fTCommands.pack(fill=X, expand=NO, padx=self.app.dpi((10, 5)), pady=self.app.dpi((5, 0)))
             fTCommands.grid_columnconfigure(18,weight=1)
             btnTAdd = ttk.Button(fTCommands, style='iconButton.Link.TButton', image=self.app.imgBtnTAdd,
-                                    command=self.triggerAdd)
+                                    command=self.commandTriggerAdd)
             Tooltip(btnTAdd, TEXT['tooltipAddTrigger'])
             btnTAdd.grid(row=0, column=0, pady=self.app.dpi(2))
             btnCAdd = ttk.Button(fTCommands, style='iconButton.Link.TButton', image=self.app.imgBtnCAdd,
@@ -270,13 +273,69 @@ class TriggerView(ttk.Frame):
             tvsbTriggerList.pack(side=RIGHT, fill=Y)
             self.tvTriggerList.pack(side=RIGHT, fill=BOTH, expand=YES)
 
+        def createTriggerListFilter():
+            self.varTriggerFilter = ttk.StringVar()
+            eFilter = ttk.Entry(self, textvariable=self.varTriggerFilter)
+            eFilter.pack(fill=X, padx=self.app.dpi((10, 5)), pady=self.app.dpi((0, 5)))
+            self.varTriggerFilter.trace_add('write', lambda *arg: self.__triggerFilter(self.varTriggerFilter.get(), self.tl.focus()))
+            eFilter.bind('<Return>', lambda *arg: self.__triggerFilter(self.varTriggerFilter.get(), self.tl.focus()))
+
         self.varTSelectFront: ttk.StringVar
         self.varTSelectBack: ttk.StringVar
         self.varTSelectTarget: ttk.StringVar
         self.tvTriggerList: TriggerTreeView
+        self.varTriggerFilter: ttk.StringVar
         self.tceClipboard: Trigger|Condition|Effect
         createControlPanel()
         createTriggerList()
+        createTriggerListFilter()
+
+    def __triggerFilter(self, sstr: str, curItem: str):
+        def _nextItem(item: str) -> str:
+            children = self.tl.get_children(item)
+            if children:
+                return children[0]
+            while item:
+                sibling = self.tl.next(item)
+                if sibling:
+                    return sibling
+                item = self.tl.parent(item)
+            return self.tl.get_children('')[0]
+
+        def _nextParentItem(item: str) -> str:
+            item = self.tl.getTriggerNode(item)
+            item = self.tl.next(item)
+            if not item:
+                return self.tl.get_children('')[0]
+            else:
+                return item
+
+        if not sstr:
+            return
+        if sstr.startswith('/'):
+            sstr = sstr[1:]
+            nextItem = _nextItem
+        else:
+            nextItem = _nextParentItem
+
+        if curItem:
+            item = nextItem(curItem)
+        elif self.tl.get_children(''):
+            item = self.tl.get_children('')[0]
+        else:
+            item = ''
+
+        startItem = item
+        while item:
+            if sstr in self.tl.item(item, 'text'):
+                self.tl.focus(item)
+                self.tl.selection_set(item)
+                self.tl.see(item)
+                break
+
+            item = nextItem(item)
+            if item == startItem:
+                break
 
     def getTrigger(self, item:str) -> Trigger:
         triggerNode = self.tl.getTriggerNode(item)
@@ -381,28 +440,55 @@ class TriggerView(ttk.Frame):
                 trigger.effect_order.insert(insertIndex, trigger.effect_order.pop())
                 self.ceAdd(parent, 'effect', newEffect, insertIndex)
 
-    def triggerAdd(self):
+    def searchTriggerMetadataContainer(self) -> Trigger | None:
+        for trigger in self.tm.triggers:
+            if (
+                trigger.display_as_objective == 0
+                and trigger.description_order == TRIGGER_METADATA_DESCRIPTION_ORDER
+                and isinstance(trigger.description, str)
+                and trigger.description.startswith(TRIGGER_CRAFT_METADATA_HEADER)
+            ):
+                return trigger
+        return None
+
+    def createMetadataContainer(self) -> Trigger:
+        return self.triggerAdd(
+            name='__metadata__',
+            setFocus=False,
+            enabled=0,
+            display_as_objective=0,
+            description_order=TRIGGER_METADATA_DESCRIPTION_ORDER)
+
+    def commandTriggerAdd(self):
         """New a trigger after selected trigger, append if nothing selected."""
         triggerCount = len(self.tm.trigger_display_order)
         triggerName = TEXT['formatNewTriggerName'].format(triggerCount)
 
         curItem = self.tl.focus()
         if curItem == '':
-            afterDisplayId = triggerCount - 1
+            insertDisplayId = triggerCount
         else:
             curItem = self.tl.getTriggerNode(curItem)
-            afterDisplayId = self.tl.index(curItem)
+            insertDisplayId = self.tl.index(curItem) + 1
+        
+        self.triggerAdd(triggerName, insertDisplayId)
 
-        # Call AoE2SP
-        newTrigger = self.tm.add_trigger(name=triggerName)
-        self.tm.trigger_display_order.insert(afterDisplayId + 1, self.tm.trigger_display_order.pop())
-
-        self.triggerNewAfter(afterDisplayId, newTrigger)
         # See if out of sight
         if not self.tl.bbox(self.tl.next(curItem)):
             self.tl.see(self.tl.next(curItem))
 
-    def triggerNewAfter(self, afterIndex, trigger:Trigger, ignoreIndex=False):
+    def triggerAdd(self, name, insert=END, setFocus=True, **kwargs) -> Trigger:
+        if insert == END:
+            insert = len(self.tm.trigger_display_order)
+
+        # Call AoE2SP
+        newTrigger = self.tm.add_trigger(name=name, **kwargs)
+        self.tm.trigger_display_order.insert(insert, self.tm.trigger_display_order.pop())
+
+        self.triggerNewAfter(insert - 1, newTrigger, setFocus=setFocus)
+        return newTrigger
+
+    def triggerNewAfter(self, afterIndex, trigger:Trigger, ignoreIndex=False, setFocus=True):
         idNewTrigger = len(self.tl.get_children(""))
         triggerImage = self.app.getTriggerIcon(trigger)
         if ignoreIndex == False:
@@ -417,8 +503,9 @@ class TriggerView(ttk.Frame):
                 id, displayId = self.tl.getNodeId(next)
                 self.tl.setNodeId(next, (id, displayId + 1))
                 next = self.tl.next(next)
-            self.tl.focus(itemTrigger)
-            self.tl.selection_set(itemTrigger)
+            if setFocus:
+                self.tl.focus(itemTrigger)
+                self.tl.selection_set(itemTrigger)
 
         for cDisplayId, cId in enumerate(trigger.condition_order):
             condition = trigger.conditions[cId]
@@ -703,12 +790,13 @@ class TriggerView(ttk.Frame):
         }
         args = {
             "change_from_player_only": self.app.options.changeFromPlayerOnly.get(),
+            "change_self_excluding": self.app.options.changeSelfExcluding.get(),
             "include_player_source": self.app.options.includeSource.get(),
             "include_player_target": self.app.options.includeTarget.get(),
             "create_copy_for_players": create_copy_for_players,
-            "unit_mappings": [m["mapping"] for m in self.app.scenOptions.unitDuplicateMappings],
-            "area_mappings": [m["mapping"] for m in self.app.scenOptions.tileDuplicateMappings \
-                + self.app.scenOptions.areaDuplicateMappings],
+            "unit_mappings": [m["mapping"] for m in self.app.scenOptions.mappings.unitDuplicateMappings],
+            "area_mappings": [m["mapping"] for m in self.app.scenOptions.mappings.tileDuplicateMappings \
+                + self.app.scenOptions.mappings.areaDuplicateMappings],
             "change_message_color": self.app.options.changeMessageColor.get(),
             "change_virtual_effects": self.app.options.changeVirtualEffects.get(),
         }
@@ -859,6 +947,7 @@ class TriggerView(ttk.Frame):
             from_player: int,
             trigger: Trigger,
             change_from_player_only: bool = False,
+            change_self_excluding: bool = False,
             include_player_source: bool = True,
             include_player_target: bool = False,
             trigger_ce_lock: TriggerCELock | None = None,
@@ -928,13 +1017,15 @@ class TriggerView(ttk.Frame):
                 cond:Condition = new_trigger.conditions[cond_x]
 
                 self.__transformDuplicatedCondition(cond, from_player, player,
-                                                    change_from_player_only, include_player_source, include_player_target,
+                                                    change_from_player_only, change_self_excluding,
+                                                    include_player_source, include_player_target,
                                                     unit_mappings, area_mappings)
             for effect_x in alter_effects:
                 effect:Effect = new_trigger.effects[effect_x]
 
                 self.__transformDuplicatedEffect(effect, from_player, player,
-                                                 change_from_player_only, include_player_source, include_player_target,
+                                                 change_from_player_only, change_self_excluding,
+                                                 include_player_source, include_player_target,
                                                  unit_mappings, area_mappings, change_message_color,
                                                  change_virtual_effects)
 
@@ -944,6 +1035,7 @@ class TriggerView(ttk.Frame):
             from_player: int,
             player,
             change_from_player_only: bool = False,
+            change_self_excluding: bool = False,
             include_player_source: bool = True,
             include_player_target: bool = False,
             unit_mappings: list[list[int]] = [],
@@ -954,9 +1046,13 @@ class TriggerView(ttk.Frame):
             if include_player_source:
                 if not change_from_player_only or (change_from_player_only and cond.source_player == from_player):
                     cond.source_player = PlayerId(player)
+                elif change_self_excluding and cond.source_player == player:
+                    cond.source_player = PlayerId(from_player)
             if include_player_target:
                 if not change_from_player_only or (change_from_player_only and cond.target_player == from_player):
                     cond.target_player = PlayerId(player)
+                elif change_self_excluding and cond.target_player == player:
+                    cond.target_player = PlayerId(from_player)
 
         # Unit
         if cond.unit_object != -1 or cond.next_object != -1:
@@ -976,6 +1072,7 @@ class TriggerView(ttk.Frame):
             from_player: int,
             player,
             change_from_player_only: bool = False,
+            change_self_excluding: bool = False,
             include_player_source: bool = True,
             include_player_target: bool = False,
             unit_mappings: list[list[int]] = [],
@@ -991,6 +1088,7 @@ class TriggerView(ttk.Frame):
                 player,
                 include_player_source,
                 change_from_player_only,
+                change_self_excluding,
                 playerColor if change_message_color else None,
                 unit_mappings,
             )
@@ -1002,9 +1100,13 @@ class TriggerView(ttk.Frame):
             if include_player_source:
                 if not change_from_player_only or (change_from_player_only and effect.source_player == from_player):
                     effect.source_player = PlayerId(player)
+                elif change_self_excluding and effect.source_player == player:
+                    effect.source_player = PlayerId(from_player)
             if include_player_target:
                 if not change_from_player_only or (change_from_player_only and effect.target_player == from_player):
                     effect.target_player = PlayerId(player)
+                elif change_self_excluding and effect.target_player == player:
+                    effect.target_player = PlayerId(from_player)
 
         # Unit
         if effect.location_object_reference != -1 or effect.selected_object_ids:
@@ -1033,6 +1135,7 @@ class TriggerView(ttk.Frame):
             srcCe: Condition | Effect,
             parent: Trigger,
             change_from_player_only: bool = False,
+            change_self_excluding: bool = False,
             include_player_source: bool = True,
             include_player_target: bool = False,
             include_gaia: bool = False,
@@ -1069,6 +1172,7 @@ class TriggerView(ttk.Frame):
                 from_player,
                 player,
                 change_from_player_only,
+                change_self_excluding,
                 include_player_source,
                 include_player_target,
                 unit_mappings,
@@ -1142,14 +1246,15 @@ class TriggerView(ttk.Frame):
                     trigger.description = trigger.description[:-len('<Original>')]
             newTriggers = self.copyTriggerPerPlayer(PlayerId.ONE, trigger,
                                                     change_from_player_only = self.app.options.changeFromPlayerOnly.get(),
+                                                    change_self_excluding = self.app.options.changeSelfExcluding.get(),
                                                     include_player_source = self.app.options.includeSource.get(),
                                                     include_player_target = self.app.options.includeTarget.get(),
                                                     create_copy_for_players = create_copy_for_players,
                                                     name_fix_format = self.app.options.nameFixFormat.get(),
                                                     name_gaia_fix = self.app.options.nameGaiaFix.get(),
-                                                    unit_mappings=[m["mapping"] for m in self.app.scenOptions.unitDuplicateMappings],
-                                                    area_mappings=[m["mapping"] for m in self.app.scenOptions.tileDuplicateMappings \
-                                                        + self.app.scenOptions.areaDuplicateMappings],
+                                                    unit_mappings=[m["mapping"] for m in self.app.scenOptions.mappings.unitDuplicateMappings],
+                                                    area_mappings=[m["mapping"] for m in self.app.scenOptions.mappings.tileDuplicateMappings \
+                                                        + self.app.scenOptions.mappings.areaDuplicateMappings],
                                                     change_message_color=self.app.options.changeMessageColor.get(),
                                                     change_virtual_effects=self.app.options.changeVirtualEffects.get())
             if self.app.options.addDuplicateMark.get():
