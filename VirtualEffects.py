@@ -19,7 +19,8 @@ _VIRTUAL_EFFECT_MARKER_RE = re.compile(
 _VIRTUAL_EFFECT_FUNCTION_RE = re.compile(
     r'\A/\*<TriggerCraftVirtualType:(?P<virtual_type_id>\d+)>\*/'
     r'(?:/\*(?P<metadata>(?:(?!\*/)[\s\S])*)\*/)?'
-    r'void (?P<function_name>VE_[A-Za-z0-9]+)\(\)\{(?P<body>.*)\}\Z',
+    r'void (?P<function_name>VE_[A-Za-z0-9]+)\(\)\{(?P<body>.*)\}'
+    r'(?:\r\n|\r|\n)*\Z',
     re.DOTALL,
 )
 _VIRTUAL_EFFECT_HEADER_RE = re.compile(
@@ -716,6 +717,7 @@ def transform_virtual_effect_all_in_one(
     change_self_excluding: bool = False,
     color_tag_mapping: list[str] = None,
     unit_mappings: list[list[int]] = [],
+    text_mappings: list[list[str]] = [],
 ) -> str | None:
     def change_color_tag(data:dict[str,str]) -> bool:
         modified = False
@@ -727,6 +729,32 @@ def transform_virtual_effect_all_in_one(
                     color_tag_mapping[from_player],
                     color_tag_mapping[to_player],
                     count=1
+                )
+                modified = True
+            elif change_self_excluding and text.startswith(color_tag_mapping[to_player]):
+                data[language_key] = text.replace(
+                    color_tag_mapping[to_player],
+                    color_tag_mapping[from_player],
+                    count=1
+                )
+                modified = True
+        return modified
+
+    def change_text(data:dict[str,str]) -> bool:
+        modified = False
+        for language_key, text in data.items():
+            if language_key in ('group',):
+                continue
+            if text_mappings[from_player] in text:
+                data[language_key] = text.replace(
+                    text_mappings[from_player],
+                    text_mappings[to_player]
+                )
+                modified = True
+            elif change_self_excluding and text_mappings[to_player] in text:
+                data[language_key] = text.replace(
+                    text_mappings[to_player],
+                    text_mappings[from_player]
                 )
                 modified = True
         return modified
@@ -768,6 +796,9 @@ def transform_virtual_effect_all_in_one(
             recreate = True
         if color_tag_mapping:
             if change_color_tag(data):
+                recreate = True
+        if text_mappings:
+            if change_text(data):
                 recreate = True
         if recreate:
             return create_localized_send_chat_script(
@@ -816,6 +847,10 @@ def transform_virtual_effect_all_in_one(
             for unit_mapping in unit_mappings:
                 if attributes.unit_id == unit_mapping[from_player]:
                     unit_id = unit_mapping[to_player]
+                    recreate = True
+                    break
+                elif change_self_excluding and attributes.unit_id == unit_mapping[to_player]:
+                    unit_id = unit_mapping[from_player]
                     recreate = True
                     break
         if color_tag_mapping:

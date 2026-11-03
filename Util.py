@@ -513,7 +513,10 @@ class PairValueEntry(ttk.Entry):
 class MappedCombobox(ttk.Combobox):
     def __init__(self, master, mapping: dict, variable: ttk.IntVar, **kwargs):
         self.mapping = mapping  # 数字 -> 文本
-        self.inverse_mapping = {v: k for k, v in mapping.items()}
+        self._mapping_items = list(mapping.items())
+        self.inverse_mapping = {}
+        for key, text in self._mapping_items:
+            self.inverse_mapping.setdefault(text, key)
         self.variable = variable
         self._updating_text = False
         self._updating_int = False
@@ -532,7 +535,10 @@ class MappedCombobox(ttk.Combobox):
 
     def update_mapping(self, mapping: dict):
         self.mapping = mapping
-        self.inverse_mapping = {v: k for k, v in mapping.items()}
+        self._mapping_items = list(mapping.items())
+        self.inverse_mapping = {}
+        for key, text in self._mapping_items:
+            self.inverse_mapping.setdefault(text, key)
         super().configure(values=list(mapping.values()))
 
     def set_variable_event(self, event):
@@ -548,7 +554,10 @@ class MappedCombobox(ttk.Combobox):
             return
         val = self.display_var.get()
         self._updating_int = True
-        if val in self.inverse_mapping:
+        index = self.current()
+        if index != -1:
+            self.variable.set(self._mapping_items[index][0])
+        elif val in self.inverse_mapping:
             self.variable.set(self.inverse_mapping[val])
         elif ReCompiled.matchInteger(val) is not None:
             self.variable.set(int(val))

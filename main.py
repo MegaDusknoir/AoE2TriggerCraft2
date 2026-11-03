@@ -95,6 +95,19 @@ class RedirectIO(TextIO):
         super().__init__()
         self.write = super().write
 
+def decode_mojibake(text: str, sourceEncoding='gb18030') -> str:
+    def encode_mojibake(text: str) -> bytes:
+        result = bytearray()
+        for char in text:
+            try:
+                result.extend(char.encode('latin1'))
+            except UnicodeEncodeError:
+                result.extend(char.encode('cp1252'))
+        return bytes(result)
+
+    raw = encode_mojibake(text)
+    return raw.decode(sourceEncoding, errors='replace')
+
 class TriggerJsonIO():
     triggerAttributesSet = [
         'name',
@@ -272,12 +285,11 @@ class TriggerJsonIO():
                     )
                 )
                 for attr in cls.effectTextAttributesSet:
-                    if attr in CeAttributes.effect().get(effect.effect_type, []) \
-                        and (
-                            effect.effect_type not in (55, 56, 81, 82, 83)
-                            or (isVirtualEffectMessage and attr == 'message')
-                        ) \
-                        and getattr(effect, attr).strip() != '':
+                    if (
+                        attr in CeAttributes.effect().get(effect.effect_type, [])
+                        and effect.effect_type not in (55, 56, 81, 82, 83)
+                        and getattr(effect, attr).strip() != ''
+                    ):
                             effectDict[attr] = getattr(effect, attr)
                 if len(effectDict) != 0:
                     effectsList.append({'effect_id': trigger.effect_order[e_display_id]} | effectDict)
@@ -657,6 +669,10 @@ class TCWindow():
         self.menuEdit.add_separator()
         self.menuEdit.add_command(label=TEXT['menuExportAllText'], command=self.exportAllText)
         self.menuEdit.add_command(label=TEXT['menuImportText'], command=self.importText)
+        if self.options.language.get() != 'en_US':
+            self.menuEdit.add_separator()
+            self.menuEdit.add_command(label=TEXT['menuTextMojibakeDecode'],
+                                    command=lambda: self.textMojibakeDecode(TEXT['codeMojibakeSourceEncoding']))
         self.menuEdit.add_separator()
         self.menuEdit.add_command(label=TEXT['menuPreferences'], command=self.__modifyPreferences)
         self.menuLanguage = ttk.Menu(self.menuRoot, tearoff=0)
@@ -1102,6 +1118,40 @@ class TCWindow():
                 TriggerJsonIO.textImport(self.triggerManager, textDump['triggers'])
                 self.fTEditor.loadTrigger()
                 self.statusBarMessage(TEXT['noticeTextJsonImported'])
+
+    def textMojibakeDecode(self, sourceEncoding):
+        if not messagebox.askokcancel(title=TEXT['messageTitleWarning'],
+                               message=TEXT['messageWarningTextMojibakeDecode'],
+                               icon='warning',
+                               default='cancel'):
+            return
+        try:
+            for m in TEXT['messageNames'].keys():
+                t = getattr(self.activeScenario.message_manager, m)
+                setattr(self.activeScenario.message_manager, m, decode_mojibake(t, sourceEncoding))
+            for p in range(1, self.activeScenario.player_manager.active_players + 1):
+                player = self.activeScenario.player_manager.players[p]
+                player.tribe_name = decode_mojibake(player.tribe_name, sourceEncoding)
+            for trigger in self.triggerManager.triggers:
+                for attr in ('description', 'short_description', 'name'):
+                    t = getattr(trigger, attr)
+                    setattr(trigger, attr, decode_mojibake(t, sourceEncoding))
+                for effect in trigger.effects:
+                    for attr in TriggerJsonIO.effectTextAttributesSet:
+                        if (
+                            attr in CeAttributes.effect().get(effect.effect_type, [])
+                            and effect.effect_type not in (55, 56, 81, 82, 83)
+                            and getattr(effect, attr).strip() != ''
+                        ):
+                            t = getattr(effect, attr)
+                            if t:
+                                setattr(effect, attr, decode_mojibake(t, sourceEncoding))
+        except UnicodeEncodeError:
+            messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageTextMojibakeDecodeError'])
+        else:
+            self.fTEditor.loadTrigger()
+            self.fMetaViewTab.loadMeta()
+            self.statusBarMessage(TEXT['noticeTextMojibakeDecoded'])
 
     def loadDuplicateMappings(self):
         openFilePath = askopenfilename(title=TEXT['titleSelectDuplicateMappingJson'],

@@ -16,7 +16,8 @@ from Localization import TEXT, UNIT_NAME
 from TerrainPal import getTileColor
 from CommonPalette import AOE_PAL
 from TriggerAbstract import getAreaAbstract
-from Util import IntListVar, PairValueEntry, ZoomImageViewer, fastAoERotate
+from Util import IntListVar, PairValueEntry, Tooltip, ZoomImageViewer, fastAoERotate
+from CeAttributesManager import CeAttributes
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -42,10 +43,14 @@ class MapView(ttk.Frame):
         (64, 64, 64),
         (255, 128, 0),
     ]
+    TRIGGER_AREA_COLOR = ImageColor.getcolor('#FFFF66CA', "RGBA")
+    TRIGGER_TILE_COLOR = ImageColor.getcolor('#FFFF66CA', "RGBA")
+    TRIGGER_LINE_COLOR = ImageColor.getcolor('#FFFFFFB5', "RGBA")
 
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
         self.app = app
+        self.rhombusViewScale: Literal[4, 8] = 4
 
         # [x1,y1,x2,y2]
         self.pointSelect = IntListVar(value=[-1,]*4)
@@ -88,6 +93,19 @@ class MapView(ttk.Frame):
         self.varAreaValue = ttk.StringVar()
         eAreaValue = ttk.Label(fPanel, textvariable=self.varAreaValue, justify='center', anchor=CENTER)
         eAreaValue.grid(column=0, row=5, sticky=EW)
+
+        ttk.Separator(fPanel, orient=HORIZONTAL).grid(column=0, row=6, sticky=EW)
+        self.varTriggerLayerVisible = ttk.BooleanVar(value=False)
+        self.btnTriggerLayerVisible = ttk.Checkbutton(
+            fPanel, text=TEXT['labelTriggerLayer'],
+            bootstyle=(ttk.ROUND, ttk.TOGGLE),
+            variable=self.varTriggerLayerVisible,
+            command=self.__toggleTriggerLayer)
+        self.btnTriggerLayerVisible.grid(
+            column=0, row=7, columnspan=2, sticky=W,
+            pady=self.app.dpi((10, 0)))
+        Tooltip(self.btnTriggerLayerVisible, TEXT['tooltipTriggerLayer'])
+
         fPanel.grid_columnconfigure(0, pad=self.app.dpi(10))
         fPanel.grid_columnconfigure(1, pad=self.app.dpi(10))
         fPanel.grid_rowconfigure(list(range(6)), pad=self.app.dpi(10))
@@ -101,8 +119,14 @@ class MapView(ttk.Frame):
         # The top layer shows units
         self.imgUnitsDotLayer: PIL.Image.Image = None
         self._unitLayerVersion = 0
+        self.imgTriggerDotLayer: PIL.Image.Image = None
+        self._triggerLayerVisible = False
+        self._triggerLayerDirty = True
+        self._triggerLayerVersion = 0
         self._mapTransformCacheSource = None
         self._mapTransformCacheVersion = -1
+        self._mapTransformCacheTriggerVersion = -1
+        self._mapTransformCacheTriggerVisible = None
         self._mapTransformCacheImage = None
 
         self.sizeMap: int = None
@@ -190,6 +214,7 @@ class MapView(ttk.Frame):
                     self._display_event(x, y)
 
     def loadMapView(self):
+        self.__cancelTriggerLayerUpdate()
         self.sizeMap = self.mm.map_width
         self.imgDotMapRaw = PIL.Image.new('RGB', (self.sizeMap,self.sizeMap))
         for y in range(0, self.mm.map_height):
@@ -197,6 +222,11 @@ class MapView(ttk.Frame):
                 tile = self.mm.get_tile(x, y)
                 self.imgDotMapRaw.putpixel((x,y), getTileColor(tile.terrain_id, tile.elevation))
         self.loadUnitLayer()
+        self._triggerLayerDirty = True
+        if self._triggerLayerVisible:
+            self.__rebuildTriggerLayer()
+        else:
+            self.imgTriggerDotLayer = None
         self.__redrawMap()
         self.zvMapView.see(*self.__inverseMapViewCoordinateConv((self.sizeMap // 2, self.sizeMap // 2)))
 
@@ -244,24 +274,20 @@ class MapView(ttk.Frame):
                         self.imgUnitsDotLayer.putpixel((dot_x,dot_y), color)
         self.updateUnitLayer()
 
-    def __mapViewCoordinateConv(self, rhombus_xy: tuple[int, int]) -> tuple[int, int]:
+    def __mapViewCoordinateConv(self, rhombus_xy: tuple[float, float]) -> tuple[int, int]:
         """Transpose the rhombus view coords to map coords"""
-        rx, ry = rhombus_xy[0], rhombus_xy[1]
-        x, y = ((rx - 2 * (ry - self.sizeMap / SQRT_8) ) / 4,
-                (rx + 2 * (ry - self.sizeMap / SQRT_8) ) / 4)
-        x = round(x * SQRT_8 - 0.5)
-        y = round(y * SQRT_8 - 0.5)
+        rx, ry = rhombus_xy
+        scale = SQRT_8 / self.rhombusViewScale
+        x = round(scale * (rx - 2 * ry) + self.sizeMap / 2 - 0.5)
+        y = round(scale * (rx + 2 * ry) - self.sizeMap / 2 - 0.5)
         return (x,y)
 
     def __inverseMapViewCoordinateConv(self, map_xy: tuple[int, int]) -> tuple[float, float]:
         """Transpose the map coords to rhombus view coords"""
         mx, my = map_xy
 
-        x = (mx + 0.5) / SQRT_8
-        y = (my + 0.5) / SQRT_8
-
-        rx = 2 * x + 2 * y
-        ry = self.sizeMap / SQRT_8 + y - x
+        rx = self.rhombusViewScale * (mx + my + 1) / (2 * SQRT_8)
+        ry = self.rhombusViewScale * (self.sizeMap + my - mx) / (4 * SQRT_8)
         return (rx, ry)
 
     def __mapLocationFix(self, xy: tuple[int, int]) -> tuple[int, int]:
@@ -275,6 +301,158 @@ class MapView(ttk.Frame):
             fixed[i] = d
         return tuple(fixed)
 
+    def markTriggerLayerDirty(self):
+        self._triggerLayerDirty = True
+        if not self._triggerLayerVisible or self.imgDotMapRaw is None:
+            return
+        self.__cancelTriggerLayerUpdate()
+        self._triggerLayerUpdate = self.after(
+            100, self.__runScheduledTriggerLayerRefresh)
+
+    def __cancelTriggerLayerUpdate(self):
+        if hasattr(self, '_triggerLayerUpdate'):
+            self.after_cancel(self._triggerLayerUpdate)
+            del self._triggerLayerUpdate
+
+    def __runScheduledTriggerLayerRefresh(self):
+        if hasattr(self, '_triggerLayerUpdate'):
+            del self._triggerLayerUpdate
+        self.__refreshTriggerLayer()
+
+    def __toggleTriggerLayer(self):
+        self.__cancelTriggerLayerUpdate()
+        self._triggerLayerVisible = self.varTriggerLayerVisible.get()
+        if self._triggerLayerVisible:
+            self.rhombusViewScale = 8
+            self.zvMapView.zoom_factor /= 2
+            self.zvMapView.min_zoom /= 2
+            self.zvMapView.max_zoom /= 2
+            self._triggerLayerDirty = True
+            self.__refreshTriggerLayer()
+        else:
+            self.rhombusViewScale = 4
+            self.zvMapView.zoom_factor *= 2
+            self.zvMapView.min_zoom *= 2
+            self.zvMapView.max_zoom *= 2
+            self.imgTriggerDotLayer = None
+            self._triggerLayerVersion += 1
+            if self.imgDotMapRaw is not None:
+                self.zvMapView.set_image(self.zvMapView.original_image)
+
+    def __refreshTriggerLayer(self):
+        if (not self._triggerLayerVisible or self.imgDotMapRaw is None
+                or not self._triggerLayerDirty):
+            return
+        self.__rebuildTriggerLayer()
+        self.zvMapView.set_image(self.zvMapView.original_image)
+
+    def __rebuildTriggerLayer(self):
+        if not self._triggerLayerVisible or self.imgDotMapRaw is None:
+            return
+        self.imgTriggerDotLayer = self.__buildTriggerLayer()
+        self._triggerLayerDirty = False
+        self._triggerLayerVersion += 1
+
+    def __mapPoint(self, x: int, y: int) -> tuple[int, int] | None:
+        if not isinstance(x, int) or not isinstance(y, int):
+            return None
+        if not (0 <= x < self.sizeMap and 0 <= y < self.sizeMap):
+            return None
+        return x, y
+
+    def __drawTriggerPoint(self, draw: PIL.ImageDraw.ImageDraw,
+                       point: tuple[int, int], color: tuple[int, int, int, int]):
+        x, y = point
+        left, top = x * 4, y * 4
+        draw.rectangle((left, top, left + 2, top + 2), outline=color, width=1)
+
+    def __drawTriggerArea(self, draw: PIL.ImageDraw.ImageDraw,
+                      area: tuple[int, int, int, int],
+                      color: tuple[int, int, int, int]) -> tuple[int, int]:
+        x1, y1, x2, y2 = area
+        left, top = min(x1, x2) * 4, min(y1, y2) * 4
+        full_right = (max(x1, x2) + 1) * 4 - 1
+        full_bottom = (max(y1, y2) + 1) * 4 - 1
+        draw.rectangle((left, top, full_right - 1, full_bottom - 1),
+                       outline=color, width=1)
+        return (round((left + full_right - 1) / 2),
+                round((top + full_bottom - 1) / 2))
+
+    def __drawTriggerDashedLine(self, draw: PIL.ImageDraw.ImageDraw,
+                         start: tuple[int, int], end: tuple[int, int],
+                         color: tuple[int, int, int, int]):
+        x, y = start
+        end_x, end_y = end
+        dx, dy = abs(end_x - x), abs(end_y - y)
+        step_x = 1 if x < end_x else -1
+        step_y = 1 if y < end_y else -1
+        error = dx - dy
+        step = 0
+        while True:
+            if step % 3 != 0:
+                draw.point((x, y), fill=color)
+            if x == end_x and y == end_y:
+                break
+            doubled_error = error * 2
+            if doubled_error > -dy:
+                error -= dy
+                x += step_x
+            if doubled_error < dx:
+                error += dx
+                y += step_y
+            step += 1
+
+    def __buildTriggerLayer(self) -> PIL.Image.Image:
+        layer = PIL.Image.new(
+            'RGBA', (self.sizeMap * 4, self.sizeMap * 4), (0, 0, 0, 0))
+        draw = PIL.ImageDraw.Draw(layer)
+        condition_attributes = CeAttributes.condition()
+        effect_attributes = CeAttributes.effect()
+
+        for trigger in self.app.triggerManager.triggers:
+            for condition in trigger.conditions:
+                attributes = condition_attributes.get(condition.condition_type, ())
+                if 'area_x1' in attributes:
+                    area = self.__mapArea(condition)
+                    if area is not None:
+                        self.__drawTriggerArea(draw, area, self.TRIGGER_AREA_COLOR)
+
+            for effect in trigger.effects:
+                attributes = effect_attributes.get(effect.effect_type, ())
+                area = self.__mapArea(effect) if 'area_x1' in attributes else None
+                area_center = self.__drawTriggerArea(draw, area, self.TRIGGER_AREA_COLOR) if area is not None else None
+
+                if 'location_x' in attributes:
+                    unit_reference = getattr(effect, 'location_object_reference', -1)
+                    location = None if unit_reference != -1 else self.__mapPoint(
+                        effect.location_x, effect.location_y)
+                    if location is not None:
+                        self.__drawTriggerPoint(draw, location, self.TRIGGER_TILE_COLOR)
+                        if area_center is not None:
+                            target_center = (location[0] * 4 + 1, location[1] * 4 + 1)
+                            self.__drawTriggerDashedLine(draw, area_center, target_center, self.TRIGGER_LINE_COLOR)
+
+                for wall_attribute in ('wall_x1', 'wall_x2'):
+                    if wall_attribute in attributes:
+                        wall_point = self.__mapPoint(
+                            getattr(effect, wall_attribute),
+                            getattr(effect, wall_attribute.replace('_x', '_y')))
+                        if wall_point is not None:
+                            self.__drawTriggerPoint(draw, wall_point, self.TRIGGER_TILE_COLOR)
+
+        return layer
+
+    def __mapArea(self, ce) -> tuple[int, int, int, int] | None:
+        x1 = getattr(ce, 'area_x1', -1)
+        y1 = getattr(ce, 'area_y1', -1)
+        x2 = getattr(ce, 'area_x2', -1)
+        y2 = getattr(ce, 'area_y2', -1)
+        point1 = self.__mapPoint(x1, y1)
+        point2 = self.__mapPoint(x2, y2)
+        if point1 is None or point2 is None:
+            return None
+        return (*point1, *point2)
+
     def __rotateMapViewport(self, image: PIL.Image.Image, zoom: float,
                             viewport: tuple[int, int, int, int]
                             ) -> tuple[PIL.Image.Image, tuple[int, int], tuple[int, int]]:
@@ -284,17 +462,27 @@ class MapView(ttk.Frame):
                     (0, 0), (1, 1))
 
         if (self._mapTransformCacheSource is not image
-                or self._mapTransformCacheVersion != self._unitLayerVersion):
-            scaled_map = image.resize((image.width * 4,) * 2, resample=Resampling.NEAREST)
+                or self._mapTransformCacheVersion != self._unitLayerVersion
+                or self._mapTransformCacheTriggerVersion != self._triggerLayerVersion
+                or self._mapTransformCacheTriggerVisible != self._triggerLayerVisible):
+            scaled_map = image.resize((image.width * self.rhombusViewScale,) * 2,
+                                      resample=Resampling.NEAREST).convert('RGBA')
+            if self._triggerLayerVisible and self.imgTriggerDotLayer is not None:
+                trigger_layer = self.imgTriggerDotLayer.resize(
+                    (self.imgTriggerDotLayer.width * (self.rhombusViewScale // 4),) * 2,
+                    resample=Resampling.NEAREST)
+                scaled_map.paste(trigger_layer, (self.rhombusViewScale // 8, ) * 2, trigger_layer)
             unit_layer = self.imgUnitsDotLayer.resize(
-                (self.imgUnitsDotLayer.width * 2,) * 2,
+                (self.imgUnitsDotLayer.width * (self.rhombusViewScale // 2),) * 2,
                 resample=Resampling.NEAREST)
-            scaled_map.paste(unit_layer, (-1, -1), unit_layer)
+            scaled_map.paste(unit_layer, (-self.rhombusViewScale // 4, ) * 2, unit_layer)
             self._mapTransformCacheSource = image
             self._mapTransformCacheVersion = self._unitLayerVersion
+            self._mapTransformCacheTriggerVersion = self._triggerLayerVersion
+            self._mapTransformCacheTriggerVisible = self._triggerLayerVisible
             self._mapTransformCacheImage = scaled_map
 
-        rotated_width = (image.width * 4) * (zoom / 4) * sqrt(2)
+        rotated_width = (image.width * self.rhombusViewScale) * (zoom / 4) * sqrt(2)
         full_width = round(rotated_width)
         full_height = round(rotated_width / 2)
         left, top, right, bottom = viewport

@@ -37,6 +37,7 @@ CONDITION_WIDGET_FORM = {
     "allow_in_fog": ('Checkbutton',1,2,int),
 }
 
+# Widget, column, row, 
 EFFECT_WIDGET_FORM = {
     'effect_type': ('Combobox',0,0,int),
     'ai_script_goal': ('Entry',0,1,int),
@@ -120,7 +121,7 @@ EFFECT_WIDGET_FORM = {
     "building_list": ('UnitConstSelector',3,1,int),
     "wall_x1": ('AreaSelector',4,1,int),
     "wall_y1": ('null',-1,-1,int),
-    "wall_x2": ('null',-1,-1,int),
+    "wall_x2": ('AreaSelector',4,2,int),
     "wall_y2": ('null',-1,-1,int),
     "object_filter": ('Combobox',3,0,int),
     "use_tag_color_for_icon": ('Checkbutton',0,1,int),

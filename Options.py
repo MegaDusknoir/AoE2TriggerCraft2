@@ -69,6 +69,10 @@ class MappingOptions():
                         "name": {
                             "type": "string"
                         },
+                        "enabled": {
+                            "type": "boolean",
+                            "default": True
+                        },
                         "mapping": {
                             "type": "array",
                             "items": {
@@ -87,6 +91,10 @@ class MappingOptions():
                     "properties": {
                         "name": {
                             "type": "string"
+                        },
+                        "enabled": {
+                            "type": "boolean",
+                            "default": True
                         },
                         "mapping": {
                             "type": "array",
@@ -112,6 +120,10 @@ class MappingOptions():
                         "name": {
                             "type": "string"
                         },
+                        "enabled": {
+                            "type": "boolean",
+                            "default": True
+                        },
                         "mapping": {
                             "type": "array",
                             "items": {
@@ -123,9 +135,32 @@ class MappingOptions():
                                     },
                                     "minItems": 2,
                                     "maxItems": 2
-                            },
+                                },
                                 "minItems": 2,
                                 "maxItems": 2
+                            },
+                            "minItems": 2,
+                            "maxItems": 8
+                        }
+                    }
+                }
+            },
+            "textDuplicateMappings" : {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "enabled": {
+                            "type": "boolean",
+                            "default": True
+                        },
+                        "mapping": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
                             },
                             "minItems": 2,
                             "maxItems": 8
@@ -145,6 +180,7 @@ class MappingOptions():
         self.unitDuplicateMappings: list[dict] = []
         self.tileDuplicateMappings: list[dict] = []
         self.areaDuplicateMappings: list[dict] = []
+        self.textDuplicateMappings: list[dict] = []
 
     def loadf(self, file):
         with open(file, 'r', encoding='utf-8') as f:
@@ -156,33 +192,47 @@ class MappingOptions():
         self.unitDuplicateMappings = []
         self.tileDuplicateMappings = []
         self.areaDuplicateMappings = []
+        self.textDuplicateMappings = []
         # json中的映射不含盖亚及未定义玩家，区域采用2层2坐标
         # 内存中的映射固定盖亚+8位，区域采用1层4坐标
         for mappingItem in mappings.get("unitDuplicateMappings", {}):
             mappingItem["mapping"].extend([-1] * (8 - len(mappingItem["mapping"])))
-            self.unitDuplicateMappings.append({"name": mappingItem["name"], "mapping": [-1] + mappingItem["mapping"]})
+            self.unitDuplicateMappings.append({"name": mappingItem["name"], "enabled": mappingItem.get("enabled", True),
+                                               "mapping": [-1] + mappingItem["mapping"]})
         for mappingItem in mappings.get("tileDuplicateMappings", {}):
             mappingItem["mapping"].extend([[-1,-1]] * (8 - len(mappingItem["mapping"])))
-            self.tileDuplicateMappings.append({"name": mappingItem["name"], "mapping": [[-1,-1]] + mappingItem["mapping"]})
+            self.tileDuplicateMappings.append({"name": mappingItem["name"], "enabled": mappingItem.get("enabled", True),
+                                               "mapping": [[-1,-1]] + mappingItem["mapping"]})
         for mappingItem in mappings.get("areaDuplicateMappings", {}):
             for i, area in enumerate(mappingItem["mapping"]):
                 mappingItem["mapping"][i] = [*area[0], *area[1]]
             mappingItem["mapping"].extend([[-1,-1,-1,-1]] * (8 - len(mappingItem["mapping"])))
-            self.areaDuplicateMappings.append({"name": mappingItem["name"], "mapping": [[-1,-1,-1,-1]] + mappingItem["mapping"]})
+            self.areaDuplicateMappings.append({"name": mappingItem["name"], "enabled": mappingItem.get("enabled", True),
+                                               "mapping": [[-1,-1,-1,-1]] + mappingItem["mapping"]})
+        for mappingItem in mappings.get("textDuplicateMappings", {}):
+            mappingItem["mapping"].extend([''] * (8 - len(mappingItem["mapping"])))
+            self.textDuplicateMappings.append({"name": mappingItem["name"], "enabled": mappingItem.get("enabled", True),
+                                               "mapping": [''] + mappingItem["mapping"]})
 
     def dump(self) -> dict:
         dump = {
             "unitDuplicateMappings": [],
             "tileDuplicateMappings": [],
             "areaDuplicateMappings": [],
+            "textDuplicateMappings": [],
         }
         for mappingItem in self.unitDuplicateMappings:
-            dump["unitDuplicateMappings"].append({"name": mappingItem["name"], "mapping": mappingItem["mapping"][1:]})
+            dump["unitDuplicateMappings"].append({"name": mappingItem["name"], "enabled": mappingItem["enabled"],
+                                                  "mapping": mappingItem["mapping"][1:]})
         for mappingItem in self.tileDuplicateMappings:
-            dump["tileDuplicateMappings"].append({"name": mappingItem["name"], "mapping": mappingItem["mapping"][1:]})
+            dump["tileDuplicateMappings"].append({"name": mappingItem["name"], "enabled": mappingItem["enabled"],
+                                                  "mapping": mappingItem["mapping"][1:]})
         for mappingItem in self.areaDuplicateMappings:
-            dump["areaDuplicateMappings"].append({"name": mappingItem["name"],
+            dump["areaDuplicateMappings"].append({"name": mappingItem["name"], "enabled": mappingItem["enabled"],
                                                   "mapping": [[[a[0],a[1]],[a[2],a[3]]] for a in mappingItem["mapping"][1:]]})
+        for mappingItem in self.textDuplicateMappings:
+            dump["textDuplicateMappings"].append({"name": mappingItem["name"], "enabled": mappingItem["enabled"],
+                                                  "mapping": mappingItem["mapping"][1:]})
         return dump
 
     def __bool__(self):
@@ -190,6 +240,7 @@ class MappingOptions():
             self.unitDuplicateMappings
             or self.tileDuplicateMappings
             or self.areaDuplicateMappings
+            or self.textDuplicateMappings
             )
 
     def save(self, file):

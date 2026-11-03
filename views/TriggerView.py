@@ -135,6 +135,7 @@ class TriggerView(ttk.Frame):
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateChangeVirtualEffects'], variable=self.app.options.changeVirtualEffects)
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateUseUnitDuplicateMappings'], variable=self.app.options.useUnitDuplicateMappings)
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateUseTileAreaDuplicateMappings'], variable=self.app.options.useTileAreaDuplicateMappings)
+                menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateUseTextDuplicateMappings'], variable=self.app.options.useTextDuplicateMappings)
                 menuDuplicate.add_separator()
                 menuDuplicate.add_checkbutton(label=TEXT['menuDuplicateAddDuplicateMark'], variable=self.app.options.addDuplicateMark)
                 menuDuplicate.add_separator()
@@ -415,6 +416,7 @@ class TriggerView(ttk.Frame):
             self.tm.triggers.append(newTrigger)
             self.tm.trigger_display_order.insert(insertIndex, self.tm.trigger_display_order.pop())
             self.triggerNewAfter(insertIndex - 1, newTrigger)
+            self.app.fMapViewTab.markTriggerLayerDirty()
         elif type(self.tceClipboard) in [Condition, Effect]:
             if curItem == '':
                 return
@@ -439,13 +441,13 @@ class TriggerView(ttk.Frame):
                 newEffect = copyEffect(self.tceClipboard, trigger)
                 trigger.effect_order.insert(insertIndex, trigger.effect_order.pop())
                 self.ceAdd(parent, 'effect', newEffect, insertIndex)
+            self.app.fMapViewTab.markTriggerLayerDirty()
 
     def searchTriggerMetadataContainer(self) -> Trigger | None:
         for trigger in self.tm.triggers:
             if (
                 trigger.display_as_objective == 0
                 and trigger.description_order == TRIGGER_METADATA_DESCRIPTION_ORDER
-                and isinstance(trigger.description, str)
                 and trigger.description.startswith(TRIGGER_CRAFT_METADATA_HEADER)
             ):
                 return trigger
@@ -674,6 +676,7 @@ class TriggerView(ttk.Frame):
         elif nodeType != 'trigger':
             self.tl.focus(parent)
             self.tl.selection_set(parent)
+        self.app.fMapViewTab.markTriggerLayerDirty()
 
     def itemMoveUp(self):
         curItem = self.tl.focus()
@@ -784,6 +787,15 @@ class TriggerView(ttk.Frame):
         next = self.tl.next(curItem)
         playerCount = self.app.activeScenario.player_manager.active_players
         create_copy_for_players = list(range(1, playerCount+1))
+        unit_mappings = [m["mapping"] for m in self.app.scenOptions.mappings.unitDuplicateMappings if m['enabled']] \
+            if self.app.options.useUnitDuplicateMappings.get() else []
+        area_mappings = [m["mapping"] for m in (
+            self.app.scenOptions.mappings.tileDuplicateMappings
+            + self.app.scenOptions.mappings.areaDuplicateMappings
+            ) if m['enabled']] \
+                if self.app.options.useTileAreaDuplicateMappings.get() else []
+        text_mappings = [m["mapping"] for m in self.app.scenOptions.mappings.textDuplicateMappings if m['enabled']] \
+            if self.app.options.useTextDuplicateMappings.get() else []
         argsTrigger = {
             "name_fix_format": self.app.options.nameFixFormat.get(),
             "name_gaia_fix": self.app.options.nameGaiaFix.get()
@@ -794,9 +806,9 @@ class TriggerView(ttk.Frame):
             "include_player_source": self.app.options.includeSource.get(),
             "include_player_target": self.app.options.includeTarget.get(),
             "create_copy_for_players": create_copy_for_players,
-            "unit_mappings": [m["mapping"] for m in self.app.scenOptions.mappings.unitDuplicateMappings],
-            "area_mappings": [m["mapping"] for m in self.app.scenOptions.mappings.tileDuplicateMappings \
-                + self.app.scenOptions.mappings.areaDuplicateMappings],
+            "unit_mappings": unit_mappings,
+            "area_mappings": area_mappings,
+            "text_mappings": text_mappings,
             "change_message_color": self.app.options.changeMessageColor.get(),
             "change_virtual_effects": self.app.options.changeVirtualEffects.get(),
         }
@@ -855,6 +867,7 @@ class TriggerView(ttk.Frame):
             self.tl.see(next)
         self.tl.focus(next)
         self.tl.selection_set(next)
+        self.app.fMapViewTab.markTriggerLayerDirty()
 
     def triggerSimilarCheck(self, triggerIds: list[int]):
         # Todo: Check other attr
@@ -957,6 +970,7 @@ class TriggerView(ttk.Frame):
             name_gaia_fix: str = "(GAIA)",
             unit_mappings: list[list[int]] = [],
             area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
+            text_mappings: list[list[str]] = [],
             change_message_color: bool = False,
             change_virtual_effects: bool = False,
     ) -> dict[PlayerId, Trigger]:
@@ -1026,7 +1040,8 @@ class TriggerView(ttk.Frame):
                 self.__transformDuplicatedEffect(effect, from_player, player,
                                                  change_from_player_only, change_self_excluding,
                                                  include_player_source, include_player_target,
-                                                 unit_mappings, area_mappings, change_message_color,
+                                                 unit_mappings, area_mappings, text_mappings,
+                                                 change_message_color,
                                                  change_virtual_effects)
 
         return return_dict
@@ -1077,6 +1092,7 @@ class TriggerView(ttk.Frame):
             include_player_target: bool = False,
             unit_mappings: list[list[int]] = [],
             area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
+            text_mappings: list[list[str]] = [],
             change_message_color: bool = False,
             change_virtual_effects: bool = False
     ):
@@ -1091,6 +1107,7 @@ class TriggerView(ttk.Frame):
                 change_self_excluding,
                 playerColor if change_message_color else None,
                 unit_mappings,
+                text_mappings,
             )
             if transformed_message is not None:
                 effect.message = transformed_message
@@ -1114,20 +1131,35 @@ class TriggerView(ttk.Frame):
                 for i, unit in enumerate(effect.selected_object_ids):
                     if unit == unit_mapping[from_player]:
                         effect.selected_object_ids[i] = unit_mapping[player]
+                    elif change_from_player_only and unit == unit_mapping[player]:
+                        effect.selected_object_ids[i] = unit_mapping[from_player]
                 if effect.location_object_reference == unit_mapping[from_player]:
                     effect.location_object_reference = unit_mapping[player]
+                elif change_from_player_only and effect.location_object_reference == unit_mapping[player]:
+                    effect.location_object_reference = unit_mapping[from_player]
 
         # Area, Tile
         if effect.area_x1 != -1 or effect.location_x != -1:
             for area_mapping in area_mappings:
                 if area_mapping[from_player] == [effect.area_x1, effect.area_y1, effect.area_x2, effect.area_y2]:
                     [effect.area_x1, effect.area_y1, effect.area_x2, effect.area_y2] = area_mapping[player]
+                elif change_from_player_only and area_mapping[player] == [effect.area_x1, effect.area_y1, effect.area_x2, effect.area_y2]:
+                    [effect.area_x1, effect.area_y1, effect.area_x2, effect.area_y2] = area_mapping[from_player]
                 if area_mapping[from_player] == [effect.location_x, effect.location_y]:
                     [effect.location_x, effect.location_y] = area_mapping[player]
+                elif change_from_player_only and area_mapping[player] == [effect.location_x, effect.location_y]:
+                    [effect.location_x, effect.location_y] = area_mapping[from_player]
         # Message
-        if change_message_color and effect.message:
-            if effect.message.startswith('<BLUE>'):
-                effect.message = effect.message.replace('<BLUE>', playerColor[player], count=1)
+        if change_message_color and effect.message and effect.effect_type != 55:
+            if effect.message.startswith(playerColor[from_player]):
+                effect.message = effect.message.replace(playerColor[from_player], playerColor[player], count=1)
+            elif change_self_excluding and effect.message.startswith(playerColor[player]):
+                effect.message = effect.message.replace(playerColor[player], playerColor[from_player], count=1)
+            for text_mapping in text_mappings:
+                if text_mapping[from_player] in effect.message:
+                    effect.message = effect.message.replace(text_mapping[from_player], text_mapping[player])
+                elif change_self_excluding and text_mapping[player] in effect.message:
+                    effect.message = effect.message.replace(text_mapping[player], text_mapping[from_player])
 
     def copyCePerPlayer(
             self,
@@ -1142,6 +1174,7 @@ class TriggerView(ttk.Frame):
             create_copy_for_players: list[int] = None,
             unit_mappings: list[list[int]] = [],
             area_mappings: list[list[tuple[int, int]] | list[tuple[int, int, int, int]]] = [],
+            text_mappings: list[list[str]] = [],
             change_message_color: bool = False,
             change_virtual_effects: bool = False
     ) -> dict[PlayerId, Condition | Effect]:
@@ -1177,6 +1210,7 @@ class TriggerView(ttk.Frame):
                 include_player_target,
                 unit_mappings,
                 area_mappings,
+                text_mappings,
             )
             if type(srcCe) == Effect:
                 transformCe(
@@ -1282,6 +1316,7 @@ class TriggerView(ttk.Frame):
         # self.tl.focus(self.tl.get_children("")[displayIdBegin])
         # self.tl.selection_set(next)
         self.clearRangeValue()
+        self.app.fMapViewTab.markTriggerLayerDirty()
         self.app.statusBarMessage(TEXT['noticeDuplicateCompleted'])
 
     def triggerUnduplicateMultiple(self):
@@ -1330,6 +1365,7 @@ class TriggerView(ttk.Frame):
         self.tl.focus(next)
         self.tl.selection_set(next)
         self.clearRangeValue()
+        self.app.fMapViewTab.markTriggerLayerDirty()
         self.app.statusBarMessage(TEXT['noticeDeduplicateCompleted'])
 
     def triggerDeleteMultiple(self):
@@ -1357,6 +1393,7 @@ class TriggerView(ttk.Frame):
         self.tl.focus(next)
         self.tl.selection_set(next)
         self.clearRangeValue()
+        self.app.fMapViewTab.markTriggerLayerDirty()
         self.app.statusBarMessage(TEXT['noticeDeleteDuplicateCompleted'])
 
     def triggerMoveMultiple(self):

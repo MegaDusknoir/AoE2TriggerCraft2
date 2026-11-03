@@ -14,3 +14,4 @@ nameGaiaFix,string,"(GAIA)",True,False,"0,10",1
 addDuplicateMark,boolean,False,True,False,"0,11",1
 useUnitDuplicateMappings,boolean,True,True,False,"0,12",1
 useTileAreaDuplicateMappings,boolean,True,True,False,"0,13",1
+useTextDuplicateMappings,boolean,True,True,False,"0,14",1

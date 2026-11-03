@@ -211,6 +211,8 @@ class CeInfoView(ttk.Frame):
                                 if layoutTypeId in [26, 59, 60, 65, 88]:
                                     # These entry's grid occupied by other attribute so grid elsewhere
                                     self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(1, 2, columnspan=2)
+                                elif layoutTypeId in [105, 106]:
+                                    self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(1, 2)
                                 else:
                                     self.effectWidgetPacks[ceType]['__variant_' + attribute].gridAttribute(column, row)
                             else:
@@ -252,7 +254,10 @@ class CeInfoView(ttk.Frame):
                         setattr(condition, attribute, defaults[attribute])
                     elif attribute not in oldLegalAttrs:
                         setattr(condition, attribute, defaults[attribute])
-
+                for attribute in ('area_x1',):
+                    if attribute in oldLegalAttrs and attribute not in legalAttrs:
+                        self.app.fMapViewTab.markTriggerLayerDirty()
+                        break
                 self.updateConditionTreeNode(curItem, condition)
             self.app.itemSelect(None)
             # __showAttributeWidgets(newType, 'condition')
@@ -433,6 +438,10 @@ class CeInfoView(ttk.Frame):
                         setattr(effect, attribute, defaults[attribute])
                     elif attribute not in oldLegalAttrs and attribute != 'message':
                         setattr(effect, attribute, defaults[attribute])
+                for attribute in ('area_x1', 'location_x', 'wall_x1', 'wall_x2'):
+                    if attribute in oldLegalAttrs and attribute not in legalAttrs:
+                        self.app.fMapViewTab.markTriggerLayerDirty()
+                        break
                 if newVirtualTypeId in (0, 1, 2, 3):
                     effect.string_id = defaults['string_id']
                 self.updateEffectTreeNode(curItem, effect)
@@ -536,7 +545,8 @@ class CeInfoView(ttk.Frame):
                             effect.armour_attack_class = None
                             effect.armour_attack_quantity = None
                         self.outer.fCeInfo.effectWidgetPacks[Effect]['armour_attack_class'].load(effect.armour_attack_class)
-                        self.outer.fCeInfo.effectWidgetPacks[Effect]['armour_attack_quantity'].load(effect.armour_attack_quantity)
+                        if effect.effect_type in self.outer.fCeInfo.EFFECTS_OBJATTR_WITH_AA_QUANTITY:
+                            self.outer.fCeInfo.effectWidgetPacks[Effect]['armour_attack_quantity'].load(effect.armour_attack_quantity)
 
                     if attribute == 'object_attributes':
                         self.outer.fCeInfo.updateEffectTreeNode(curItem, effect)
@@ -768,34 +778,36 @@ class CeInfoView(ttk.Frame):
                 title = TEXT['effectAttributeName']['area']
                 encodeMethod = lambda pointList: getAreaAbstract(pointList[0], pointList[1],
                                                                 pointList[2], pointList[3])
-            else:
+            elif attribute == 'wall_x1':
                 title = TEXT['effectAttributeName']['wall']
-                encodeMethod = lambda pointList: getAreaAbstract(pointList[0], pointList[1],
-                                                                pointList[2], pointList[3])
+                encodeMethod = lambda pointList: getLocationAbstract(pointList[0], pointList[1])
+            else:
+                title = TEXT['effectAttributeName']['wall2']
+                encodeMethod = lambda pointList: getLocationAbstract(pointList[0], pointList[1])
             self.attribute = attribute
             self.outer = outer
             self.variable = IntListVar()
             self.label = ttk.Label(master, text=title)
             self.lvbtn = ListValueButton(self, variable=self.variable, style='ceWidgetButton.Outline.TButton', width=16,
                                         encodeMethod=encodeMethod)
-            self.lvbtn.pack(side=LEFT, fill=BOTH, expand=True)
             self.lvbtn.set_command(self.__viewAttributeArea)
             self.lvbtn.set_internal_event(lambda ce=ceType: \
                                             self.__modifyAttributeArea(ce))
             self.btnSetUnit = ttk.Button(self, style='iconButton.Link.TButton', image=self.outer.imgCeSetLocationUnit,
                                         command=self.__setAttributeUnit)
-            self.btnSetUnit.pack(side=LEFT, padx=0)
             Tooltip(self.btnSetUnit, TEXT['tooltipSetLocationUnit'])
             self.btnSetArea = ttk.Button(self, style='iconButton.Link.TButton', image=self.outer.imgCeSetArea,
                                         command=self.__setAttributeArea)
             self.btnSetArea.pack(side=RIGHT, padx=0)
+            self.btnSetUnit.pack(side=RIGHT, padx=0)
+            self.lvbtn.pack(side=LEFT, fill=BOTH, expand=True)
             Tooltip(self.btnSetArea, TEXT['tooltipSetLocationArea'])
 
         def load(self, value: list):
             self.variable.set(value)
 
         def gridAttributeWithUnitSel(self, column, row, columnspan=1, rowspan=1):
-            self.btnSetUnit.pack(side=LEFT, padx=0)
+            self.btnSetUnit.pack(side=RIGHT, padx=0)
             return super().gridAttribute(column, row, columnspan, rowspan)
 
         def gridAttribute(self, column, row, columnspan=1, rowspan=1):
@@ -815,7 +827,7 @@ class CeInfoView(ttk.Frame):
 
         def __setAttributeArea(self) -> None:
             x1, y1, x2, y2 = self.outer.fMapViewTab.pointSelect.get()
-            if self.attribute in ('area_x1', 'wall_x1'):
+            if self.attribute in ('area_x1',):
                 if (x2, y2) == (-1, -1):
                     x2, y2 = x1, y1
                 if x1 > x2:
@@ -823,6 +835,8 @@ class CeInfoView(ttk.Frame):
                 if y1 > y2:
                     y1, y2 = y2, y1
                 self.lvbtn.internal_var.set([x1, y1, x2, y2])
+            elif self.attribute in ('wall_x1', 'wall_x2'):
+                self.lvbtn.internal_var.set([x1, y1])
             elif self.attribute == 'location_x':
                 location = [x1, y1, -1]
                 self.lvbtn.internal_var.set(location)
@@ -830,13 +844,19 @@ class CeInfoView(ttk.Frame):
         def __viewAttributeArea(self):
             coords = self.variable.get()
             if len(coords) != 0:
-                if self.attribute in ('area_x1', 'wall_x1'):
+                if self.attribute in ('area_x1',):
                     x1, y1, x2, y2 = coords
                     if (x1, y1) == (-1, -1):
                         self.outer.fMapViewTab.drawClear()
                     else:
                         self.outer.fMapViewTab.drawSetPoint1((x1, y1), draw=False)
                         self.outer.fMapViewTab.drawSetPoint2((x2, y2), see=True)
+                elif self.attribute in ('wall_x1', 'wall_x2'):
+                    x1, y1 = coords
+                    if (x1, y1) == (-1, -1):
+                        self.outer.fMapViewTab.drawClear()
+                    else:
+                        self.outer.fMapViewTab.drawSetPoint1((x1, y1), see=True)
                 elif self.attribute == 'location_x':
                     x1, y1, unit = coords
                     if unit != -1:
@@ -861,9 +881,11 @@ class CeInfoView(ttk.Frame):
                     setattr(ce, 'area_x2', x2)
                     setattr(ce, 'area_y2', y2)
                 elif self.attribute == 'wall_x1':
-                    x1, y1, x2, y2 = self.variable.get()
+                    x1, y1 = self.variable.get()
                     setattr(ce, 'wall_x1', x1)
                     setattr(ce, 'wall_y1', y1)
+                elif self.attribute == 'wall_x2':
+                    x2, y2 = self.variable.get()
                     setattr(ce, 'wall_x2', x2)
                     setattr(ce, 'wall_y2', y2)
                 elif self.attribute == 'location_x':
@@ -876,6 +898,7 @@ class CeInfoView(ttk.Frame):
                     self.outer.fCeInfo.updateConditionTreeNode(curItem, ce)
                 elif ceType == Effect:
                     self.outer.fCeInfo.updateEffectTreeNode(curItem, ce)
+                self.outer.fMapViewTab.markTriggerLayerDirty()
 
     # endregion CEWidgets
 
@@ -1262,6 +1285,9 @@ class CeInfoView(ttk.Frame):
                             self.effectWidgetPacks[Effect][attribute].load([
                                     getattr(effect, 'wall_x1'),
                                     getattr(effect, 'wall_y1'),
+                                ])
+                        elif attribute == 'wall_x2':
+                            self.effectWidgetPacks[Effect][attribute].load([
                                     getattr(effect, 'wall_x2'),
                                     getattr(effect, 'wall_y2'),
                                 ])

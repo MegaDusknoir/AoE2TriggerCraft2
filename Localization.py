@@ -7,7 +7,13 @@ from Util import OpenResourcesFile, ResourcesFileError
 
 class LanguageDict(dict):
     def __missing__(self, key):
-        return f'<{key}>' if key not in self.PREDEFINE_DICT_NAMES else LanguageDict()
+        if (
+            key in self.PREDEFINE_DICT_NAMES
+            or (isinstance(key, str) and key.startswith('dataset'))
+            ):
+            return LanguageDict()
+        else:
+            return f'<{key}>'
 
     PREDEFINE_DICT_NAMES = [
         'messageNames',
@@ -21,28 +27,7 @@ class LanguageDict(dict):
         'virtualEffectName',
         'effectDescriptionFormatShift',
         'effectDescriptionFormat',
-        'datasetObjectClass',
-        'datasetObjectType',
-        'datasetObjectState',
-        'datasetDifficultyLevel',
-        'datasetTechnologyState',
-        'datasetComparison',
-        'datasetDiplomacyState',
-        'datasetUnitAIAction',
-        'datasetVictoryTimerType',
-        'datasetDecisionOption',
-        'datasetActionType',
-        'datasetOperation',
-        'datasetDamageClass',
-        'datasetAttackStance',
-        'datasetVisibilityState',
-        'datasetPlayerColorId',
         'dataUnitFaceToName',
-        'datasetColorMood',
-        'datasetTimeUnit',
-        'datasetObjectAttribute',
-        'datasetLocalTechnology',
-        'datasetObjectModifyAttributeState',
         'namePreferences',
         'descPreferences'
     ]

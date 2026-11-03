@@ -476,7 +476,7 @@ def abstractCondition(condition: Condition) -> str:
 def abstractEffect(effect: Effect) -> str:
     typeKey = effect.effect_type
     if typeKey in TEXT['effectDescriptionFormat']:
-        formatString = TEXT['effectDescriptionFormat'][typeKey]
+        formatString: str = TEXT['effectDescriptionFormat'][typeKey]
         try:
             match effect.effect_type:
                 case EffectId.NONE:
@@ -943,16 +943,17 @@ def abstractEffect(effect: Effect) -> str:
                                                                         effect.area_x2, effect.area_y2,
                                                                         allowAreaEmpty=True))
                 case EffectId.TRAIN_UNIT:
-                    getPlayerAbstract(effect.source_player)
-                    if effect.selected_object_ids != []:
-                        getUnitsAbstract(effect.selected_object_ids)
-                    else:
-                        getAreaAbstract(effect.area_x1, effect.area_y1,
-                                        effect.area_x2, effect.area_y2)
-                    effect.object_list_unit_id,
-                    getLocationAbstract(effect.location_x, effect.location_y)
-                    # Todo
-                    return formatString
+                    return formatString.format(
+                        getNonSpecificUnitAbstract(-1, -1,
+                                                -1, effect.source_player,
+                                                effect.selected_object_ids,
+                                                effect.area_x1, effect.area_y1,
+                                                effect.area_x2, effect.area_y2,
+                                                allowAreaEmpty=True),
+                        getUnitListName(effect.object_list_unit_id),
+                        effect.quantity,
+                        getLocationAbstract(effect.location_x, effect.location_y),
+                    )
                 case EffectId.INITIATE_RESEARCH:
                     return formatString.format(getPlayerAbstract(effect.source_player),
                                             getUnitsAbstract(effect.selected_object_ids),
@@ -978,7 +979,6 @@ def abstractEffect(effect: Effect) -> str:
                                             TEXT['datasetOperation'][effect.operation],
                                             getArmorClassAbstract(effect.armour_attack_class))
                 case EffectId.MODIFY_ATTRIBUTE_BY_VARIABLE:
-                    effect.message
                     return formatString.format(getPlayerAbstract(effect.source_player),
                                             getUnitListName(effect.object_list_unit_id),
                                             getAttributesAbstract(effect.object_attributes,
@@ -986,17 +986,18 @@ def abstractEffect(effect: Effect) -> str:
                                             effect.variable,
                                             TEXT['datasetOperation'][effect.operation])
                 case EffectId.SET_OBJECT_COST:
-                    # Todo
-                    return formatString
+                    return formatString.format(getPlayerAbstract(effect.source_player),
+                                            getUnitListName(effect.object_list_unit_id),
+                                            getCostAbstract([
+                                                (effect.tribute_list, effect.quantity),
+                                                ]))
                 case EffectId.LOAD_KEY_VALUE:
-                    # Todo
-                    return formatString
+                    return formatString.format(effect.variable, getMessageAbstract(effect.message),
+                                               effect.quantity)
                 case EffectId.STORE_KEY_VALUE:
-                    # Todo
-                    return formatString
+                    return formatString.format(effect.variable, getMessageAbstract(effect.message))
                 case EffectId.DELETE_KEY:
-                    # Todo
-                    return formatString
+                    return formatString.format(getMessageAbstract(effect.message))
                 case EffectId.CHANGE_TECHNOLOGY_ICON:
                     return formatString.format(getPlayerAbstract(effect.source_player),
                                             getTechnologyAbstract(effect.technology),
@@ -1030,8 +1031,8 @@ def abstractEffect(effect: Effect) -> str:
                     return formatString.format(getPlayerAbstract(effect.source_player),
                                             TEXT['datasetPlayerColorId'][effect.player_color])
                 case EffectId.CREATE_DECISION:
-                    # Todo
-                    return formatString
+                    return formatString.format(effect.decision_id,
+                                               getMessageAbstract(effect.message))
                 # 91 ~ 97 reserved
                 case EffectId.DISABLE_UNIT_ATTACKABLE:
                     return formatString.format(getNonSpecificUnitAbstract(effect.object_list_unit_id, -1,
@@ -1091,7 +1092,7 @@ def abstractEffect(effect: Effect) -> str:
                         TEXT['datasetVisibilityState'][effect.visibility_state]
                     )   
                 case EffectId.BUILD_OBJECT:
-                    return formatString
+                    return _abstractComplexEffect(effect, formatString)
                 case EffectId.MIRROR_DIPLOMACY:
                     return formatString.format(
                         getPlayerAbstract(effect.source_player),
@@ -1148,7 +1149,7 @@ def _abstractComplexEffect(effect: Effect, formatString: str) -> str:
             # effect.object_filter
             value = effect.quantity if effect.object_attributes not in [8,9] else effect.armour_attack_quantity
             if effect.object_attributes == 50 and effect.quantity == 0:
-                formatString = TEXT['effectDescriptionFormatShift'][2]
+                formatString = TEXT['effectDescriptionFormatShift'][3]
                 value = getMessageAbstract(effect.message)
             return formatString.format(getNonSpecificUnitAbstract(effect.object_list_unit_id, -1,
                                                                 -1, effect.source_player,
@@ -1173,5 +1174,25 @@ def _abstractComplexEffect(effect: Effect, formatString: str) -> str:
                                     effect.variable,
                                     TEXT['datasetOperation'][effect.operation]
                                     )
+        case EffectId.BUILD_OBJECT:
+            if effect.location_x != -1:
+                location = getLocationAbstract(
+                    effect.location_x,
+                    effect.location_y,
+                    effect.location_object_reference
+                    )
+            else:
+                location = getAreaAbstract(
+                    effect.wall_x1, effect.wall_y1,
+                    effect.wall_x2, effect.wall_y2
+                    )
+            return formatString.format(getNonSpecificUnitAbstract(effect.object_list_unit_id, effect.object_group,
+                                                                effect.object_type, effect.source_player,
+                                                                effect.selected_object_ids,
+                                                                effect.area_x1, effect.area_y1,
+                                                                effect.area_x2, effect.area_y2,
+                                                                allowAreaEmpty=True),
+                                    location,
+                                    getUnitListName(effect.building_list))
         case _:
             raise ValueError('Unexpected type')
