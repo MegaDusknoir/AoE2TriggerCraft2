@@ -10,6 +10,8 @@ from binascii import Error as Base64DecodeError
 from dataclasses import dataclass
 from typing import Callable
 
+from AoE2ScenarioParser.objects.managers.trigger_manager import TriggerManager
+
 VIRTUAL_EFFECT_TYPE_ID_BASE = 100000
 TRIGGER_CRAFT_METADATA_HEADER = '<TriggerCraftMetadata>'
 
@@ -205,7 +207,7 @@ def invert_localized_send_chat_silent(code: str | None) -> str | None:
     return code[:silent_start] + replacement + code[silent_end:]
 
 
-def ensure_unique_virtual_effect_function_names(trigger_manager) -> int:
+def ensure_unique_virtual_effect_function_names(trigger_manager: TriggerManager) -> int:
     virtual_effects = []
     all_names = set()
     for trigger in trigger_manager.triggers:

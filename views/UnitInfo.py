@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Callable, Literal
 from math import pi as PI
 from tkinter.constants import *
@@ -10,20 +11,22 @@ from AoE2ScenarioParser.objects.data_objects.unit import Unit
 
 from Localization import TEXT, UNIT_NAME
 from TriggerAbstract import getUnitListName, getUnitsAbstract
-from Util import IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, ReCompiled, ScenarioVersion, Tooltip, ValueSelectButton
+from Util import EntryU, IntListVar, IntValueButton, ListValueButton, MappedCombobox, PairValueEntry, ReCompiled, ScenarioVersion, Tooltip, ValueSelectButton
 from views.UnitView import UnitKey
 
 if TYPE_CHECKING:
     from main import TCWindow
 
+logger = logging.getLogger(__name__.split('.')[-1])
+
 class UnitInfoView(ttk.Frame):
     @property
     def ul(self):
-        return self.app.fUEditor.tvUnitList
+        return self.app.ul
 
     @property
     def um(self):
-        return self.app.activeScenario.unit_manager
+        return self.app.um
 
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
@@ -130,10 +133,11 @@ class UnitInfoView(ttk.Frame):
 
         def modifyAttribute(self, attribute: str):
             strValue = self.variable.get()
-            print(f'modifyAttribute {attribute} = {strValue}')
+            logger.debug(TEXT['logModifyUnitAttributeWidget'].format(attribute, strValue))
             if self.outer.fUnitInfo.unitFocus is not None:
                 unit = self.outer.fUnitInfo.unitFocus.getUnit(self.outer.fUnitInfo.um)
                 setattr(unit, attribute, strValue)
+                self.outer.modified = True
 
     class __IntAttributeEntry(PairValueEntry):
         def __init__(self, outer: 'TCWindow', master, attribute: str, **kwargs):
@@ -148,10 +152,11 @@ class UnitInfoView(ttk.Frame):
             except ValueError:
                 intValue = -1
             else:
-                print(f'modifyAttribute {attribute} = {intValue}')
+                logger.debug(TEXT['logModifyUnitAttributeWidget'].format(attribute, intValue))
                 if self.outer.fUnitInfo.unitFocus is not None:
                     unit = self.outer.fUnitInfo.unitFocus.getUnit(self.outer.fUnitInfo.um)
                     setattr(unit, attribute, intValue)
+                    self.outer.modified = True
 
     class __FloatAttributeEntry(PairValueEntry):
         def __init__(self, outer: 'TCWindow', master, attribute: str, **kwargs):
@@ -181,35 +186,46 @@ class UnitInfoView(ttk.Frame):
             except ValueError:
                 floatValue = -1
             else:
-                print(f'modifyAttribute {attribute} = {floatValue}')
+                logger.debug(TEXT['logModifyUnitAttributeWidget'].format(attribute, floatValue))
                 if self.outer.fUnitInfo.unitFocus is not None:
                     unit = self.outer.fUnitInfo.unitFocus.getUnit(self.outer.fUnitInfo.um)
                     if attribute in ['x', 'y']:
                         old_x, old_y = unit.x, unit.y
                         setattr(unit, attribute, floatValue)
+                        self.outer.modified = True
                         self.outer.fMapViewTab.updateUnitLayerDot(old_x, old_y)
                         self.outer.fMapViewTab.updateUnitLayerDot(unit.x, unit.y)
                     else:
                         setattr(unit, attribute, floatValue)
+                        self.outer.modified = True
 
     def __modifyUnitPlayer(self):
+        logger.debug(TEXT['logModifyUnitAttributeWidget'].format('player', self.varUPlayer.get()))
         if self.unitFocus is not None:
             unit = self.unitFocus.getUnit(self.um)
-            unit.player = self.varUPlayer.get()
-            newIndex = self.um.units[unit.player].index(unit)
-            self.unitFocus = UnitKey(unit.player, newIndex)
-            self.app.fMapViewTab.updateUnitLayerDot(unit.x, unit.y)
+            newPlayer = self.varUPlayer.get()
+            if unit.player != newPlayer:
+                unit.player = newPlayer
+                self.app.modified = True
+                newIndex = self.um.units[unit.player].index(unit)
+                self.unitFocus = UnitKey(unit.player, newIndex)
+                self.app.fMapViewTab.updateUnitLayerDot(unit.x, unit.y)
 
     def __modifyUnitGarrison(self, garrison: int):
+        logger.debug(TEXT['logModifyUnitAttributeWidget'].format('garrisoned_in_id', garrison))
         if self.unitFocus is not None:
             unit = self.unitFocus.getUnit(self.um)
-            unit.garrisoned_in_id = garrison
+            if unit.garrisoned_in_id != garrison:
+                unit.garrisoned_in_id = garrison
+                self.app.modified = True
 
     def __modifyUnitConst(self, value: int):
-        print(f'modifyAttribute unit_const = {value}')
+        logger.debug(TEXT['logModifyUnitAttributeWidget'].format('unit_const', value))
         if self.unitFocus is not None:
             unit = self.unitFocus.getUnit(self.um)
-            unit.unit_const = value
+            if unit.unit_const != value:
+                unit.unit_const = value
+                self.app.modified = True
             for item in self.ul.get_children(""):
                 if self.ul.getNodeUnitKey(item) == self.unitFocus:
                     self.ul.setNodeConst(item, unit.unit_const)
@@ -220,10 +236,12 @@ class UnitInfoView(ttk.Frame):
             intValue = int(var.get())
         except ValueError:
             return
-        print(f'modifyReferenceId = {intValue}')
+        logger.debug(TEXT['logModifyUnitAttributeWidget'].format('reference_id', intValue))
         if self.unitFocus is not None:
             unit = self.unitFocus.getUnit(self.um)
-            unit.reference_id = intValue
+            if unit.reference_id != intValue:
+                unit.reference_id = intValue
+                self.app.modified = True
             for item in self.ul.get_children(""):
                 if self.ul.getNodeUnitKey(item) == self.unitFocus:
                     self.ul.setNodeRefId(item, unit.reference_id)
@@ -268,7 +286,7 @@ class UnitsSelectButton(ttk.Frame):
     def __setMultipleUnits(self) -> None:
         if self.outer.nTabsLeft.select() \
         and self.outer.nTabsLeft.index('current') == self.outer.nTabsLeft.index(self.outer.fUEditor):
-            unitsId = self.outer.fUEditor.tvUnitList.getUnitsSelectionRefId()
+            unitsId = self.outer.ul.getUnitsSelectionRefId()
             self.lvbtn.internal_var.set(unitsId)
         else:
             self.outer.nTabsLeft.select(self.outer.fUEditor)
@@ -276,7 +294,7 @@ class UnitsSelectButton(ttk.Frame):
     def __setSingleUnits(self) -> None:
         if self.outer.nTabsLeft.select() \
         and self.outer.nTabsLeft.index('current') == self.outer.nTabsLeft.index(self.outer.fUEditor):
-                unitId = self.outer.fUEditor.tvUnitList.getUnitFocusRefId()
+                unitId = self.outer.ul.getUnitFocusRefId()
                 if unitId == None:
                     unitId = -1
                 self.lvbtn.internal_var.set([unitId, ])
@@ -425,7 +443,7 @@ class UnitConstSelectButton(IntValueButton):
         wndSelect.protocol("WM_DELETE_WINDOW", lambda: _close_dialog(wndSelect))
 
         varFilter = ttk.StringVar()
-        eFilter = ttk.Entry(wndSelect, textvariable=varFilter)
+        eFilter = EntryU(wndSelect, textvariable=varFilter)
         eFilter.bind('<Return>', on_entry_confirm)
         eFilter.pack(padx=self.outer.dpi(10), pady=self.outer.dpi(5), fill=X)
 
@@ -453,4 +471,3 @@ class UnitConstSelectButton(IntValueButton):
 
         wndSelect.transient(self)
         eFilter.focus()
-

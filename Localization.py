@@ -5,8 +5,8 @@ import os
 
 from Util import OpenResourcesFile, ResourcesFileError
 
-class LanguageDict(dict):
-    def __missing__(self, key):
+class LanguageDict(dict[str, str]):
+    def __missing__(self, key: str) -> str:
         if (
             key in self.PREDEFINE_DICT_NAMES
             or (isinstance(key, str) and key.startswith('dataset'))

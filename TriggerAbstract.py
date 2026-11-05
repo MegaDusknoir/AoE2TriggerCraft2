@@ -1,3 +1,4 @@
+import logging
 import re
 from Localization import *
 
@@ -20,6 +21,8 @@ from VirtualEffects import (
     parse_localized_unit_name_attributes,
     validate_localized_effect_json,
 )
+
+logger = logging.getLogger(__name__.split('.')[-1])
 
 class FindCFunction():
     FUNC_NAME_RE = None
@@ -465,10 +468,10 @@ def abstractCondition(condition: Condition) -> str:
                 case _:
                     return getConditionName(condition.condition_type)
         except UnsupportedAttributeError as e:
-            print(f"Unsupported attribute: {e}")
+            logger.warning(TEXT['logUnsupportedAttribute'].format(e))
             return getConditionName(condition.condition_type)
         except TypeError as e:
-            print(f"Python TypeError at {condition.condition_type}: {e}")
+            logger.warning(TEXT['logAbstractPythonTypeError'].format(condition.condition_type, e, ce='Condition'))
             return getConditionName(condition.condition_type)
     else:
         return getConditionName(condition.condition_type)
@@ -1102,10 +1105,10 @@ def abstractEffect(effect: Effect) -> str:
                 case _:
                     return getEffectName(effect.effect_type)
         except UnsupportedAttributeError as e:
-            print(f"Unsupported attribute: {e}")
+            logger.warning(TEXT['logUnsupportedAttribute'].format(e))
             return getEffectName(effect.effect_type)
         except TypeError as e:
-            print(f"Python TypeError at {effect.effect_type}: {e}")
+            logger.warning(TEXT['logAbstractPythonTypeError'].format(effect.effect_type, e, ce='Effect'))
             return getEffectName(effect.effect_type)
     else:
         return getEffectName(effect.effect_type)

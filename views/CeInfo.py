@@ -3,8 +3,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import replace
 import json
+import logging
 from typing import TYPE_CHECKING, Literal
-from math import sqrt
 from tkinter.constants import *
 from tkinter.ttk import Widget
 import ttkbootstrap as ttk
@@ -44,14 +44,16 @@ from VirtualEffects import (
 if TYPE_CHECKING:
     from main import TCWindow
 
+logger = logging.getLogger(__name__.split('.')[-1])
+
 class CeInfoView(ttk.Frame):
     @property
     def tl(self):
-        return self.app.fTEditor.tvTriggerList
+        return self.app.tl
 
     @property
     def tm(self):
-        return self.app.triggerManager
+        return self.app.tm
 
     EFFECTS_OBJATTR_WITH_AA_QUANTITY = [51, 104, 105]
     EFFECTS_OBJATTR_ONLY_AA_CLASS = [79, 87, 106]
@@ -64,7 +66,7 @@ class CeInfoView(ttk.Frame):
 
         def __createAttributeWidgets(formDict, attribute, ceType:Condition|Effect) -> None:
             def object_attributes_widget(var: ttk.IntVar):
-                curItem = self.app.fTEditor.tvTriggerList.focus()
+                curItem = self.app.tl.focus()
                 effect = self.app.fTEditor.getEffect(curItem)
                 if effect is not None and effect.effect_type in self.EFFECTS_OBJATTR_WITH_AA_QUANTITY:
                     value = var.get()
@@ -197,7 +199,7 @@ class CeInfoView(ttk.Frame):
                             elif attribute == 'source_player' or attribute == 'target_player':
                                 # Get player amount
                                 widgetRef.update_mapping( \
-                                    {i:getPlayerAbstract(i) for i in range(0, self.app.activeScenario.player_manager.active_players + 1)})
+                                    {i:getPlayerAbstract(i) for i in range(0, self.app.pm.active_players + 1)})
                             widgetRef.gridAttribute(column, row)
                         case 'Checkbutton':
                             widgetRef.gridAttribute(column, row)
@@ -259,6 +261,7 @@ class CeInfoView(ttk.Frame):
                         self.app.fMapViewTab.markTriggerLayerDirty()
                         break
                 self.updateConditionTreeNode(curItem, condition)
+                logger.debug(TEXT['logModifyCeType'].format('Condition', condition.condition_type))
             self.app.itemSelect(None)
             # __showAttributeWidgets(newType, 'condition')
 
@@ -444,6 +447,7 @@ class CeInfoView(ttk.Frame):
                         break
                 if newVirtualTypeId in (0, 1, 2, 3):
                     effect.string_id = defaults['string_id']
+                logger.debug(TEXT['logModifyCeType'].format('Effect', effect.effect_type))
                 self.updateEffectTreeNode(curItem, effect)
             self.app.itemSelect(None)
             # __showAttributeWidgets(newType, 'effect')
@@ -527,8 +531,8 @@ class CeInfoView(ttk.Frame):
             self.variable.set(value)
 
         def __modifyCeAttributeCombobox(self, attribute: str, variable: ttk.IntVar, ceType: type):
-            print(f'__modifyCeAttributeCombobox: {attribute} = {variable.get()}')
-            curItem = self.outer.fTEditor.tvTriggerList.focus()
+            logger.debug(TEXT['logModifyCeAttributeWidget'].format('Combobox', attribute, variable.get()))
+            curItem = self.outer.tl.focus()
             if ceType == Effect:
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
@@ -582,8 +586,8 @@ class CeInfoView(ttk.Frame):
             self.variable.set(value)
 
         def __modifyCeAttributeEntry(self, attribute: str, variable: ttk.StringVar, ceType: type):
-            print(f'__modifyCeAttributeEntry: {attribute} = {variable.get()}')
-            curItem = self.outer.fTEditor.tvTriggerList.focus()
+            logger.debug(TEXT['logModifyCeAttributeWidget'].format('Entry', attribute, variable.get()))
+            curItem = self.outer.tl.focus()
             if ceType == Effect:
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
@@ -640,8 +644,8 @@ class CeInfoView(ttk.Frame):
             self.variable.set(value)
 
         def __modifyCeAttributeCheckbutton(self, attribute: str, variable: ttk.BooleanVar, ceType: type):
-            print(f'__modifyCeAttributeCheckbutton: {attribute} = {variable.get()}')
-            curItem = self.outer.fTEditor.tvTriggerList.focus()
+            logger.debug(TEXT['logModifyCeAttributeWidget'].format('Checkbutton', attribute, variable.get()))
+            curItem = self.outer.tl.focus()
             if ceType == Effect:
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
@@ -663,7 +667,7 @@ class CeInfoView(ttk.Frame):
                 title = TEXT['conditionAttributeName'][attribute]
             self.outer = outer
             self.label = ttk.Label(master, text=title)
-            super().__init__(master, height=2, width=2, **kwargs)
+            super().__init__(master, height=2, width=2, undo=True, **kwargs)
             self.text.bind('<<Modified>>',
                            lambda e, attr=attribute: \
                                self.__modifyAttributeText(attr))
@@ -677,8 +681,8 @@ class CeInfoView(ttk.Frame):
             if self.text.edit_modified() == False:
                 return
             self.text.edit_modified(False)
-            curItem = self.outer.fTEditor.tvTriggerList.focus()
-            match self.outer.fTEditor.tvTriggerList.itemType(curItem):
+            curItem = self.outer.tl.focus()
+            match self.outer.tl.itemType(curItem):
                 case 'condition':
                     condition = self.outer.fTEditor.getCondition(curItem)
                     if condition is not None:
@@ -716,8 +720,8 @@ class CeInfoView(ttk.Frame):
             self.variable.set(value)
 
         def __modifyCeAttributeButton(self, units: list[int] | int, attribute: str, ceType: type):
-            print(f'__modifyCeAttributeUnitsButton: {attribute} = {units}')
-            curItem = self.outer.fTEditor.tvTriggerList.focus()
+            logger.debug(TEXT['logModifyCeAttributeWidget'].format('Button', attribute, units))
+            curItem = self.outer.tl.focus()
             if ceType == Effect:
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
@@ -750,8 +754,8 @@ class CeInfoView(ttk.Frame):
             self.variable.set(value)
 
         def __modifyCeUnitConstButton(self, unitConst: int, attribute: str, ceType: type):
-            print(f'__modifyCeUnitConstButton: {attribute} = {unitConst}')
-            curItem = self.outer.fTEditor.tvTriggerList.focus()
+            logger.debug(TEXT['logModifyCeAttributeWidget'].format('UnitConstButton', attribute, unitConst))
+            curItem = self.outer.tl.focus()
             if ceType == Effect:
                 effect = self.outer.fTEditor.getEffect(curItem)
                 if effect is not None:
@@ -817,7 +821,7 @@ class CeInfoView(ttk.Frame):
         def __setAttributeUnit(self) -> None:
             if self.outer.nTabsLeft.select() \
             and self.outer.nTabsLeft.index('current') == self.outer.nTabsLeft.index(self.outer.fUEditor):
-                unitId = self.outer.fUEditor.tvUnitList.getUnitFocusRefId()
+                unitId = self.outer.ul.getUnitFocusRefId()
                 if unitId == None:
                     unitId = -1
                 location = [-1, -1, unitId]
@@ -868,7 +872,8 @@ class CeInfoView(ttk.Frame):
                         self.outer.fMapViewTab.drawClear()
 
         def __modifyAttributeArea(self, ceType: type) -> None:
-            curItem = self.outer.fTEditor.tvTriggerList.focus()
+            logger.debug(TEXT['logModifyCeAttributeWidget'].format('Combobox', self.attribute, self.variable.get()))
+            curItem = self.outer.tl.focus()
             if ceType == Condition:
                 ce = self.outer.fTEditor.getCondition(curItem)
             elif ceType == Effect:
@@ -978,11 +983,13 @@ class CeInfoView(ttk.Frame):
                 raise ValueError(f"Unknown effect attribute: {attribute}")
 
     def updateConditionTreeNode(self, item: str, condition:Condition) -> None:
+        self.app.modified = True
         abstract = abstractCondition(condition)
         self.tl.item(item, text=' ' + abstract)
         self.app.statusBarMessage(abstract)
 
     def updateEffectTreeNode(self, item: str, effect:Effect) -> None:
+        self.app.modified = True
         abstract = abstractEffect(effect)
         self.tl.item(item, text=' ' + abstract)
         self.app.statusBarMessage(abstract)
@@ -1153,9 +1160,9 @@ class CeInfoView(ttk.Frame):
                                     getattr(condition, 'area_y2'),
                                 ])
                     case _:
-                        print(attribute, getattr(condition, attribute))
+                        logger.error(attribute, getattr(condition, attribute))
             except:
-                print(f'Load {attribute} fail')
+                logger.error(TEXT['logLoadAttributeFail'].format(attribute))
                 raise
         self.app.statusBarMessage(abstract)
 
@@ -1292,8 +1299,8 @@ class CeInfoView(ttk.Frame):
                                     getattr(effect, 'wall_y2'),
                                 ])
                     case _:
-                        print(attribute, value)
+                        logger.info(attribute, value)
             except:
-                print(f'Load {attribute} fail')
+                logger.error(TEXT['logLoadAttributeFail'].format(attribute))
                 raise
         self.app.statusBarMessage(abstract)

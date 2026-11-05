@@ -1,4 +1,5 @@
 
+import logging
 import os
 import sys
 import re
@@ -51,7 +52,7 @@ from views.DisablesView import DisablesView
 from views.TriggerInfo import TriggerInfoView
 from views.CeInfo import CeInfoView
 from views.MappingEditor import MappingEditor
-from Util import DebugTimeCount, ScenarioVersion
+from Util import DebugTimeCount, EntryU, ScenarioVersion
 from VirtualEffects import (
     decode_trigger_metadata_description,
     encode_trigger_metadata_description,
@@ -393,6 +394,8 @@ class TriggerJsonIO():
             return False
         return True
 
+logger = logging.getLogger(__name__.split('.')[-1])
+
 class TCWindow():
 
     def __init__(self, scen='', theme='darkly') -> None:
@@ -427,6 +430,7 @@ class TCWindow():
         else:
             self.initialOpen = ''
         self.activeScenario: AoE2DEScenario = None
+        self._modified: bool = False
         self.restartToLoad = None
         if self.initialOpen == '':
             self.editorVersion = DEFAULT_VERSION
@@ -449,13 +453,27 @@ class TCWindow():
         self.__createMainWindow()
 
         end_init = time.time()
-        print(f'Initialize used {end_init - start_init:.3f} seconds')
+        logging.basicConfig(
+            level=logging.INFO,
+            stream=sys.stdout,
+            format='[%(levelname)s] %(name)s: %(message)s'
+        )
+        for name in [
+            'DisablesView','UnitView','MappingEditor','MapView','MetaView',
+            'TriggerView','TriggerInfo','CeInfo','UnitInfo',
+        ]:
+            logging.getLogger(name).setLevel(logging.DEBUG)
+        logger.info(TEXT['logInitialiTime'].format(end_init - start_init))
 
     def windowClose(self):
-        if self.openedScenPath == '':
-            self.root.destroy()
+        operationCancel = True
+        if not self.modified:
+            operationCancel = False
         elif self.askSaveScenario():
-            self.root.destroy()
+            operationCancel = False
+        if operationCancel:
+            return
+        self.root.destroy()
 
     class LoadingDifferentVersionException(Exception):
         pass
@@ -470,7 +488,7 @@ class TCWindow():
         if self.initialOpen == '':
             self.generateDefaultScenario()
         else:
-            self.openScenario(self.initialOpen)
+            self.__openScenario(self.initialOpen)
             if self.activeScenario == None:
                 if DEFAULT_VERSION != self.editorVersion:
                     self.restartToLoad = ''
@@ -521,6 +539,74 @@ class TCWindow():
         if self.logCatch != None:
             self.logCatch(s)
         return len(s)
+
+    # region Alias
+
+    @property
+    def scen(self):
+        return self.activeScenario
+
+    @property
+    def tm(self):
+        """alias of trigger_manager"""
+        return self.activeScenario.trigger_manager
+
+    @property
+    def um(self):
+        """alias of unit_manager"""
+        return self.activeScenario.unit_manager
+
+    @property
+    def pm(self):
+        """alias of player_manager"""
+        return self.activeScenario.player_manager
+
+    @property
+    def msgm(self):
+        """alias of message_manager"""
+        return self.activeScenario.message_manager
+
+    @property
+    def mm(self):
+        """alias of map_manager"""
+        return self.activeScenario.map_manager
+
+    @property
+    def fh(self):
+        """alias of FileHeader struct"""
+        return self.activeScenario.sections['FileHeader']
+
+    @property
+    def ul(self):
+        """alias of Unit List widget"""
+        return self.fUEditor.tvUnitList
+
+    @property
+    def tl(self):
+        """alias of Trigger List widget"""
+        return self.fTEditor.tvTriggerList
+
+    @property
+    def ml(self):
+        """alias of Mapping List widget"""
+        return self.fMappingEditor.tvMappingList
+
+    @property
+    def mp(self):
+        """alias of Mappings Option"""
+        return self.scenOptions.mappings
+
+    @property
+    def modified(self):
+        return self._modified
+
+    @modified.setter
+    def modified(self, val: bool):
+        if self._modified ^ val:
+            self._modified = val
+            self.updateWindowTitle()
+
+    # endregion Alias
 
     # region Creation
 
@@ -631,7 +717,6 @@ class TCWindow():
         self.nTabsRightTop.add(self.fDisablesViewTab, text=TEXT['tabDisablesView'])
         self.nTabsRightTop.select(self.fMapViewTab)
 
-        self.triggerManager: TriggerManager
         self.fTriggerInfo = TriggerInfoView(self, self.nTabsRightBottom)
         self.fCeInfo = CeInfoView(self, self.nTabsRightBottom)
         self.fUnitInfo = UnitInfoView(self, self.nTabsRightBottom)
@@ -648,17 +733,18 @@ class TCWindow():
         self.menuRoot = ttk.Menu(self.root)
         self.menuFile = ttk.Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuFile'], menu=self.menuFile)
-        self.menuFile.add_command(label=TEXT['menuNew'], command=self.newScenario)
-        self.menuFile.add_command(label=TEXT['menuOpen'], accelerator='Ctrl+O', command=self.openScenarioAskFile)
-        self.menuFile.add_command(label=TEXT['menuReload'], accelerator='Ctrl+R', command=self.openScenario)
-        self.menuFile.add_command(label=TEXT['menuSave'], accelerator='Ctrl+S', command=self.saveScenario)
+        self.menuFile.add_command(label=TEXT['menuNew'], command=self.cmdNewScenario)
+        self.menuFile.add_command(label=TEXT['menuOpen'], accelerator='Ctrl+O', command=self.cmdOpenScenarioFile)
+        self.menuFile.add_command(label=TEXT['menuReload'], accelerator='Ctrl+R', command=self.cmdReopenScenario)
+        self.menuFile.add_command(label=TEXT['menuSave'], accelerator='Ctrl+S', command=self.cmdSaveScenario)
         self.menuFile.entryconfig(TEXT['menuSave'], state='normal' if self.options.enableOverwritingSource.get() else 'disabled')
         self.options.enableOverwritingSource.trace_add('write', lambda *_: \
             self.menuFile.entryconfig(TEXT['menuSave'], state='normal' if self.options.enableOverwritingSource.get() else 'disabled'))
         self.menuFile.add_command(label=TEXT['menuSaveAs'], accelerator='Ctrl+Shift+S', command=self.saveAsScenario)
-        self.menuFile.add_command(label=TEXT['menuClose'], command=self.closeScenario)
+        self.menuFile.add_command(label=TEXT['menuClose'], command=self.cmdCloseScenario)
         self.menuFile.add_separator()
         self.menuFile.add_command(label=TEXT['menuExit'], command=self.windowClose)
+
         self.menuEdit = ttk.Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuEdit'], menu=self.menuEdit)
         self.menuEdit.add_command(label=TEXT['menuExportAllTriggerToText'], command=self.exportTriggerToText)
@@ -675,10 +761,12 @@ class TCWindow():
                                     command=lambda: self.textMojibakeDecode(TEXT['codeMojibakeSourceEncoding']))
         self.menuEdit.add_separator()
         self.menuEdit.add_command(label=TEXT['menuPreferences'], command=self.__modifyPreferences)
+
         self.menuLanguage = ttk.Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuLanguage'], menu=self.menuLanguage)
         for language in LOCALIZATION_DEFINES:
             self.menuLanguage.add_command(label=language['name'], command=lambda code=language['code']: self.changeLanguage(code))
+
         self.menuAbout = ttk.Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuHelp'], menu=self.menuAbout)
         self.menuAbout.add_command(label=TEXT['menuLogs'], command=self.__showLogs)
@@ -717,7 +805,7 @@ class TCWindow():
                         lDescription = ttk.Label(fOption, text=TEXT['descPreferences'][option],
                                                  font=(tkfont.nametofont('TkDefaultFont').cget('family'), 8))
                         lDescription.pack(side=TOP, anchor=W)
-                        wOption = ttk.Entry(fOption, textvariable=self.varPreferences[option])
+                        wOption = EntryU(fOption, textvariable=self.varPreferences[option])
                         wOption.pack(side=TOP, anchor=W)
                     case 'boolean':
                         wOption = ttk.Checkbutton(fOption, text=TEXT['descPreferences'][option], variable=self.varPreferences[option],
@@ -755,18 +843,18 @@ class TCWindow():
         self.statusBarMsgTop = ''
 
     def __bindGlobalKeys(self):
-        self.root.bind_all("<Control-o>", lambda e: self.openScenarioAskFile())
-        self.root.bind_all("<Control-O>", lambda e: self.openScenarioAskFile())
-        self.root.bind_all("<Control-r>", lambda e: self.openScenario())
-        self.root.bind_all("<Control-R>", lambda e: self.openScenario())
-        self.root.bind_all("<Control-s>", lambda e: self.saveScenario() if self.options.enableOverwritingSource.get() else None)
-        self.root.bind_all("<Control-S>", lambda e: self.saveScenario() if self.options.enableOverwritingSource.get() else None)
+        self.root.bind_all("<Control-o>", lambda e: self.cmdOpenScenarioFile())
+        self.root.bind_all("<Control-O>", lambda e: self.cmdOpenScenarioFile())
+        self.root.bind_all("<Control-r>", lambda e: self.cmdReopenScenario())
+        self.root.bind_all("<Control-R>", lambda e: self.cmdReopenScenario())
+        self.root.bind_all("<Control-s>", lambda e: self.cmdSaveScenario() if self.options.enableOverwritingSource.get() else None)
+        self.root.bind_all("<Control-S>", lambda e: self.cmdSaveScenario() if self.options.enableOverwritingSource.get() else None)
         self.root.bind_all("<Control-Shift-s>", lambda e: self.saveAsScenario())
         self.root.bind_all("<Control-Shift-S>", lambda e: self.saveAsScenario())
 
     # endregion Creation
 
-    # region Methods
+    # region UIMethods
 
     def dpi(self, value:int | tuple[int, ...]):
         if type(value) == tuple:
@@ -779,7 +867,7 @@ class TCWindow():
         self.main.destroy()
         self.__createMainWindow()
 
-        self.root.title(f"{TEXT['titleMainWindow']} - [{self.windowTitleTail}]")
+        self.updateWindowTitle()
         self.main.update_idletasks()
         self.readScenario()
 
@@ -854,25 +942,23 @@ class TCWindow():
         lblAboutPoweredBy.pack(side=BOTTOM, pady=(0, self.dpi(10)))
         self.wndAbout.grab_set()
 
+    # endregion UIMethods
+
+    # region MenuMethods
+
     def exportTriggerToText(self):
-        if not self.openedScenPath:
-            initialFile = 'default.json'
-        else:
-            scenFolder, scenName = os.path.split(self.openedScenPath)
-            scenStem, scenExt = os.path.splitext(scenName)
-            initialFile = scenStem + '.json'
+        initialFile = self.initialFileHelper('.json')
         saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveTriggerJson'],
                                          initialfile=initialFile,
                                          filetypes=[('JSON', '*.json')])
         if not saveFilePath:
             return
-        jsonName, jsonExt = os.path.splitext(saveFilePath)
-        if not jsonExt and not os.path.isfile(saveFilePath):
-            saveFilePath += '.json'
+        saveFilePath = self.autoExtHelper(saveFilePath, '.json')
 
-        tDump = TriggerJsonIO.export(self.triggerManager)
+        tDump = TriggerJsonIO.export(self.tm)
         with open(saveFilePath, 'w', encoding='utf-8') as fp:
             json.dump(tDump, fp, indent=4, ensure_ascii=False)
+        logger.info(TEXT['logEntireTriggerJsonSaved'].format(len(tDump["triggers"])))
         self.statusBarMessage(TEXT['noticeTriggerJsonSaved'])
 
     def importTriggerFromText(self):
@@ -891,7 +977,7 @@ class TCWindow():
                 raise e
         if triggersDump:
             try:
-                TriggerJsonIO.restore(self.triggerManager, triggersDump)
+                TriggerJsonIO.restore(self.tm, triggersDump)
             except TriggerJsonIO.TriggerJsonInvalidError:
                 messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
             except TriggerJsonIO.TriggerJsonNotRestorableError:
@@ -900,7 +986,9 @@ class TCWindow():
                 messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
                 raise e
             else:
+                self.modified = True
                 self.fTEditor.loadTrigger()
+                logger.info(TEXT['logTriggerJsonRestored'].format(len(self.tm.triggers)))
                 self.statusBarMessage(TEXT['noticeTriggerJsonRestored'])
 
     def exportSelTriggerToText(self):
@@ -910,24 +998,18 @@ class TCWindow():
             return
         displayIdBegin, displayIdEnd, displayIdTarget = valueRange
 
-        if not self.openedScenPath:
-            initialFile = 'default.json'
-        else:
-            scenFolder, scenName = os.path.split(self.openedScenPath)
-            scenStem, scenExt = os.path.splitext(scenName)
-            initialFile = scenStem + '.json'
+        initialFile = self.initialFileHelper('.json')
         saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveTriggerJson'],
                                          initialfile=initialFile,
                                          filetypes=[('JSON', '*.json')])
         if not saveFilePath:
             return
-        jsonName, jsonExt = os.path.splitext(saveFilePath)
-        if not jsonExt and not os.path.isfile(saveFilePath):
-            saveFilePath += '.json'
+        saveFilePath = self.autoExtHelper(saveFilePath, '.json')
 
-        tDump = TriggerJsonIO.export(self.triggerManager, displayIdBegin, displayIdEnd)
+        tDump = TriggerJsonIO.export(self.tm, displayIdBegin, displayIdEnd)
         with open(saveFilePath, 'w', encoding='utf-8') as fp:
             json.dump(tDump, fp, indent=4, ensure_ascii=False)
+        logger.info(TEXT['logTriggerJsonSaved'].format(len(tDump["triggers"])))
         self.statusBarMessage(TEXT['noticeTriggerJsonSaved'])
 
     def addTriggerFromText(self):
@@ -946,34 +1028,28 @@ class TCWindow():
                 raise e
         if triggersDump:
             try:
-                TriggerJsonIO.append(self.triggerManager, triggersDump)
+                TriggerJsonIO.append(self.tm, triggersDump)
             except TriggerJsonIO.TriggerJsonInvalidError:
                 messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
             except Exception as e:
                 messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
                 raise e
             else:
+                self.modified = True
                 self.fTEditor.loadTrigger()
+                logger.info(TEXT['logTriggerJsonAdded'].format(len(triggersDump["triggers"])))
                 self.statusBarMessage(TEXT['noticeTriggerJsonAdded'])
 
     def exportAllText(self):
-        if not self.openedScenPath:
-            initialFile = 'default.json'
-        else:
-            scenFolder, scenName = os.path.split(self.openedScenPath)
-            scenStem, scenExt = os.path.splitext(scenName)
-            initialFile = scenStem + '.json'
-        initialFile = 'text_' + initialFile
+        initialFile = 'text_' + self.initialFileHelper('.json')
         saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveTextJson'],
                                          initialfile=initialFile,
                                          filetypes=[('JSON', '*.json')])
         if not saveFilePath:
             return
-        _, fileExt = os.path.splitext(saveFilePath)
-        if not fileExt and not os.path.isfile(saveFilePath):
-            saveFilePath += '.json'
+        saveFilePath = self.autoExtHelper(saveFilePath, '.json')
 
-        tTrigger = TriggerJsonIO.textExport(self.triggerManager)
+        tTrigger = TriggerJsonIO.textExport(self.tm)
         tPName = []
         for p in range(1, self.activeScenario.player_manager.active_players + 1):
             tPName.append(self.activeScenario.player_manager.players[p].tribe_name)
@@ -987,6 +1063,7 @@ class TCWindow():
         except Exception as e:
             messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
         else:
+            logger.info(TEXT['logTextJsonSaved'])
             self.statusBarMessage(TEXT['noticeTextJsonSaved'])
 
     def importText(self):
@@ -1108,15 +1185,17 @@ class TCWindow():
             except jsonschema.ValidationError as e:
                 messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
             else:
-                if not TriggerJsonIO.textPreimportCheck(self.triggerManager, textDump['triggers']):
+                if not TriggerJsonIO.textPreimportCheck(self.tm, textDump['triggers']):
                     messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageTextJsonNotMatchError'])
                     return
                 for k, v in textDump['messages'].items():
                     setattr(self.activeScenario.message_manager, k, v)
                 for i, name in enumerate(textDump['players']):
                     self.activeScenario.player_manager.players[i + 1].tribe_name = name
-                TriggerJsonIO.textImport(self.triggerManager, textDump['triggers'])
+                TriggerJsonIO.textImport(self.tm, textDump['triggers'])
+                self.modified = True
                 self.fTEditor.loadTrigger()
+                logger.info(TEXT['logTextJsonImported'])
                 self.statusBarMessage(TEXT['noticeTextJsonImported'])
 
     def textMojibakeDecode(self, sourceEncoding):
@@ -1132,7 +1211,7 @@ class TCWindow():
             for p in range(1, self.activeScenario.player_manager.active_players + 1):
                 player = self.activeScenario.player_manager.players[p]
                 player.tribe_name = decode_mojibake(player.tribe_name, sourceEncoding)
-            for trigger in self.triggerManager.triggers:
+            for trigger in self.tm.triggers:
                 for attr in ('description', 'short_description', 'name'):
                     t = getattr(trigger, attr)
                     setattr(trigger, attr, decode_mojibake(t, sourceEncoding))
@@ -1151,6 +1230,8 @@ class TCWindow():
         else:
             self.fTEditor.loadTrigger()
             self.fMetaViewTab.loadMeta()
+            self.modified = True
+            logger.info(TEXT['logTextMojibakeDecoded'].format(encoding=sourceEncoding))
             self.statusBarMessage(TEXT['noticeTextMojibakeDecoded'])
 
     def loadDuplicateMappings(self):
@@ -1166,67 +1247,90 @@ class TCWindow():
             except Exception as e:
                 messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
             else:
+                self.modified = True
                 self.fMappingEditor.loadConfig()
+                logger.info(TEXT['logLoadedDuplicateMappings'])
                 self.statusBarMessage(TEXT['noticeDuplicateMappingsLoaded'])
 
     def saveDuplicateMappings(self):
-        if not self.openedScenPath:
-            initialFile = 'default.json'
-        else:
-            scenFolder, scenName = os.path.split(self.openedScenPath)
-            scenStem, scenExt = os.path.splitext(scenName)
-            initialFile = scenStem + '.json'
+        initialFile = 'mapping_' + self.initialFileHelper('.json')
         saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveDuplicateMappingJson'],
+                                         initialfile=initialFile,
                                          filetypes=[('JSON', '*.json')])
         if not saveFilePath:
             return
-        jsonName, jsonExt = os.path.splitext(saveFilePath)
-        if not jsonExt and not os.path.isfile(saveFilePath):
-            saveFilePath += '.json'
+        saveFilePath = self.autoExtHelper(saveFilePath, '.json')
 
         try:
             self.scenOptions.mappings.save(saveFilePath)
         except Exception as e:
             messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
         else:
+            logger.info(TEXT['logSavedDuplicateMappings'])
             self.statusBarMessage(TEXT['noticeDuplicateMappingsSaved'])
 
-    def itemSelect(self, event):
-        curItem = self.fTEditor.tvTriggerList.focus()
-        nodeType = self.fTEditor.tvTriggerList.itemType(curItem)
-        if nodeType == 'trigger':
+    # endregion MenuMethods
+
+    # endregion Methods
+
+    def tceTabShow(self, tab: Literal['trigger', 'effect', 'condition']):
+        if tab == 'trigger':
             self.nTabsRightBottom.tab(self.fCeInfo, state="disabled")
             self.nTabsRightBottom.tab(self.fTriggerInfo, state="normal")
             self.nTabsRightBottom.select(self.fTriggerInfo)
-            triggerId = self.fTEditor.tvTriggerList.getNodeId(curItem)[0]
-            trigger = self.triggerManager.get_trigger(triggerId)
-            self.fTriggerInfo.loadTriggerAttributes(trigger)
-        elif nodeType == 'condition' or nodeType == 'effect':
+        elif tab in ('condition','effect'):
             self.nTabsRightBottom.tab(self.fTriggerInfo, state="disabled")
             self.nTabsRightBottom.tab(self.fCeInfo, state="normal")
             self.nTabsRightBottom.select(self.fCeInfo)
-            parent = self.fTEditor.tvTriggerList.parent(curItem)
-            triggerId = self.fTEditor.tvTriggerList.getNodeId(parent)[0]
-            trigger = self.triggerManager.get_trigger(triggerId)
-            if nodeType == 'condition':
+            if tab == 'condition':
                 self.nTabsRightBottom.tab(self.fCeInfo, text=TEXT['tabConditionInfo'])
+            else:
+                self.nTabsRightBottom.tab(self.fCeInfo, text=TEXT['tabEffectInfo'])
+
+    def itemSelect(self, event):
+        curItem = self.tl.focus()
+        nodeType = self.tl.itemType(curItem)
+        self.tceTabShow(nodeType)
+        if nodeType == 'trigger':
+            triggerId = self.tl.getNodeId(curItem)[0]
+            trigger = self.tm.get_trigger(triggerId)
+            self.fTriggerInfo.loadTriggerAttributes(trigger)
+        elif nodeType == 'condition' or nodeType == 'effect':
+            parent = self.tl.parent(curItem)
+            triggerId = self.tl.getNodeId(parent)[0]
+            trigger = self.tm.get_trigger(triggerId)
+            if nodeType == 'condition':
                 self.fCeInfo.wEType.label.grid_forget()
                 self.fCeInfo.wEType.grid_forget()
                 self.fCeInfo.wCType.gridAttribute(0, 0)
-                condition = trigger.conditions[self.fTEditor.tvTriggerList.getNodeId(curItem)[0]]
+                condition = trigger.conditions[self.tl.getNodeId(curItem)[0]]
                 self.fCeInfo.loadConditionAttributes(condition)
             else:
-                self.nTabsRightBottom.tab(self.fCeInfo, text=TEXT['tabEffectInfo'])
                 self.fCeInfo.wCType.label.grid_forget()
                 self.fCeInfo.wCType.grid_forget()
                 self.fCeInfo.wEType.gridAttribute(0, 0)
-                effect = trigger.effects[self.fTEditor.tvTriggerList.getNodeId(curItem)[0]]
+                effect = trigger.effects[self.tl.getNodeId(curItem)[0]]
                 self.fCeInfo.loadEffectAttributes(effect)
+
+    def initialFileHelper(self, ext: str) -> str:
+        if not self.openedScenPath:
+            initialFile = 'default' + ext
+        else:
+            _, scenName = os.path.split(self.openedScenPath)
+            scenStem, _ = os.path.splitext(scenName)
+            initialFile = scenStem + ext
+        return initialFile
+
+    def autoExtHelper(self, filePath: str, ext: str) -> str:
+        _, fileExt = os.path.splitext(filePath)
+        if not fileExt and not os.path.isfile(filePath):
+            filePath += ext
+        return filePath
 
     def askSaveScenario(self) -> bool:
         """Return True if operation continue, False if break"""
         replySave =  messagebox.askyesnocancel(title=TEXT['titleAskSaveScenario'],
-                                               message=TEXT['messageAskSaveScenario'].format(),
+                                               message=TEXT['messageAskSaveScenario'],
                                                icon='question',
                                                default='cancel')
         if replySave is True:
@@ -1277,10 +1381,12 @@ class TCWindow():
             messagebox.showerror(title=TEXT['titleSavefailed'], message=TEXT['messageSavefailed'].format(e))
             raise e
         else:
+            self.modified = False
+            logger.info(TEXT['logSavedScenario'].format(path))
             self.statusBarMessage(TEXT['noticeScenarioSaved'])
             return True
 
-    def saveScenario(self, path=None):
+    def cmdSaveScenario(self, path=None):
         if path == None:
             path = self.openedScenPath
         if path == '':
@@ -1289,19 +1395,19 @@ class TCWindow():
                 self.openedScenPath = newFile
                 scenFolder, scenName = os.path.split(self.openedScenPath)
                 self.windowTitleTail = scenName
-                self.root.title(f"{TEXT['titleMainWindow']} - [{self.windowTitleTail}]")
+                self.updateWindowTitle()
                 return True
             return False
         else:
             return self.__saveScen(path)
 
     def saveAsScenario(self) -> str:
+        initialFile = self.initialFileHelper('.aoe2scenario')
         saveFilePath = asksaveasfilename(title=TEXT['titleSelectSaveScenario'],
+                                         initialfile=initialFile,
                                          filetypes=[(TEXT['typeNameScenario'], '*.aoe2scenario')])
-        if saveFilePath != '':
-            scenName, scenExt = os.path.splitext(saveFilePath)
-            if scenExt == '' and os.path.isfile(saveFilePath) == False:
-                saveFilePath += '.aoe2scenario'
+        if saveFilePath:
+            saveFilePath = self.autoExtHelper(saveFilePath, '.aoe2scenario')
             if self.__saveScen(saveFilePath):
                 return saveFilePath
         return ''
@@ -1321,14 +1427,14 @@ class TCWindow():
         else:
             return 'Early'
 
-    def openScenario(self, path=None):
+    def __openScenario(self, path=None):
         if path == None:
             path = self.openedScenPath
         if path == '':
             return
         scenFolder, scenName = os.path.split(path)
         scenStem, scenExt = os.path.splitext(scenName)
-        # print(scenFolder, scenStem, scenExt)
+        # logger.debug(scenFolder, scenStem, scenExt)
         try:
             scenVersion = self.readScenarioVersion(path)
         except (FileNotFoundError, PermissionError) as e:
@@ -1418,10 +1524,10 @@ class TCWindow():
         TriggerJsonIO.assignVersion(self.editorVersion)
         self.windowTitleTail = name
         self.openedScenPath = path
-        self.triggerManager = self.activeScenario.trigger_manager
         self.__loadScenarioMetadata()
+        self.modified = False
         self.readScenario()
-        print(f'Loaded {name}')
+        logger.info(TEXT['logLoadedScenario'].format(name))
 
     def __loadScenarioMetadata(self):
         trigger = self.fTEditor.searchTriggerMetadataContainer()
@@ -1438,13 +1544,30 @@ class TCWindow():
 
         self.scenOptions.load(metadata)
 
-    def openScenarioAskFile(self):
+    def cmdReopenScenario(self):
+        operationCancel = True
+        if not self.modified:
+            operationCancel = False
+        elif self.askSaveScenario():
+            operationCancel = False
+        if operationCancel:
+            return
+        self.__openScenario()
+
+    def cmdOpenScenarioFile(self):
+        operationCancel = True
+        if not self.modified:
+            operationCancel = False
+        elif self.askSaveScenario():
+            operationCancel = False
+        if operationCancel:
+            return
         openFilePath = askopenfilename(title=TEXT['titleSelectScenario'],
-                                       filetypes=[(TEXT['typeNameScenario'], '*.aoe2scenario'), (TEXT['typeNameAll'], '*')])
-        self.openScenario(openFilePath)
+                                    filetypes=[(TEXT['typeNameScenario'], '*.aoe2scenario'), (TEXT['typeNameAll'], '*')])
+        self.__openScenario(openFilePath)
 
     def readScenario(self):
-        self.root.title(f"{TEXT['titleMainWindow']} - [{self.windowTitleTail}]")
+        self.updateWindowTitle()
         self.fMetaViewTab.loadMeta()
         self.fTEditor.loadTrigger()
         self.fMapViewTab.loadMapView()
@@ -1453,17 +1576,25 @@ class TCWindow():
         self.fMappingEditor.loadConfig()
         self.statusBarMessage(TEXT['noticeScenarioLoaded'])
 
-    def newScenario(self):
-        if self.openedScenPath == '':
-            self.generateDefaultScenario()
+    def cmdNewScenario(self):
+        operationCancel = True
+        if not self.modified:
+            operationCancel = False
         elif self.askSaveScenario():
-            self.generateDefaultScenario()
+            operationCancel = False
+        if operationCancel:
+            return
+        self.generateDefaultScenario()
 
-    def closeScenario(self):
-        if self.openedScenPath == '':
-            self.generateDefaultScenario()
+    def cmdCloseScenario(self):
+        operationCancel = True
+        if not self.modified:
+            operationCancel = False
         elif self.askSaveScenario():
-            self.generateDefaultScenario()
+            operationCancel = False
+        if operationCancel:
+            return
+        self.generateDefaultScenario()
 
     def getTriggerIcon(self, trigger:Trigger) -> PIL.ImageTk.PhotoImage:
         if trigger.enabled == 1:
@@ -1477,6 +1608,9 @@ class TCWindow():
             else:
                 triggerImage = self.imgTriggerDisabledLoop
         return triggerImage
+
+    def updateWindowTitle(self):
+        self.root.title(f"{TEXT['titleMainWindow']} - {'*' if self.modified else ''}[{self.windowTitleTail}]")
 
     # endregion Methods
 

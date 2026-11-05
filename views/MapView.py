@@ -26,11 +26,11 @@ SQRT_8 = sqrt(8)
 class MapView(ttk.Frame):
     @property
     def mm(self):
-        return self.app.activeScenario.map_manager
+        return self.app.mm
 
     @property
     def um(self):
-        return self.app.activeScenario.unit_manager
+        return self.app.um
 
     UNIT_DOT_PAL = [
         (255, 255, 255),
@@ -409,7 +409,7 @@ class MapView(ttk.Frame):
         condition_attributes = CeAttributes.condition()
         effect_attributes = CeAttributes.effect()
 
-        for trigger in self.app.triggerManager.triggers:
+        for trigger in self.app.tm.triggers:
             for condition in trigger.conditions:
                 attributes = condition_attributes.get(condition.condition_type, ())
                 if 'area_x1' in attributes:

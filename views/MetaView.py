@@ -16,15 +16,15 @@ class MetaView(ttk.Frame):
 
     @property
     def scen(self):
-        return self.app.activeScenario
+        return self.app.scen
 
     @property
     def fh(self):
-        return self.scen.sections['FileHeader']
+        return self.app.fh
 
     @property
     def msgm(self):
-        return self.app.activeScenario.message_manager
+        return self.app.msgm
 
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
@@ -83,7 +83,7 @@ class MetaView(ttk.Frame):
         eMessageStringId.pack(side=RIGHT, padx=self.app.dpi((10, 10)))
         lMessageStringId.pack(side=RIGHT, padx=self.app.dpi((10, 0)))
         fMessageLine1.pack(side=TOP, fill=X, padx=self.app.dpi((10, 10)), pady=self.app.dpi((10, 10)))
-        self.tMessage = ScrolledText(self, height=2, width=2)
+        self.tMessage = ScrolledText(self, height=2, width=2, undo=True)
         self.tMessage.text.bind('<<Modified>>',
                         lambda e: \
                             self.__msgModified(self.getMsgAttrSelect()))
@@ -121,6 +121,7 @@ class MetaView(ttk.Frame):
         self.tMessage.text.edit_modified(False)
         msg = self.tMessage.text.get(1.0, 'end-1c')
         setattr(self.msgm, msgAttr, msg.replace('\n', '\r'))
+        self.app.modified = True
 
     def __msgStrIdModified(self, msgAttr: str):
         try:
@@ -128,3 +129,4 @@ class MetaView(ttk.Frame):
         except ValueError:
             return
         setattr(self.msgm, msgAttr + '_string_table_id', value)
+        self.app.modified = True

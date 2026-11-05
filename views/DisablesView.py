@@ -6,7 +6,7 @@ import ttkbootstrap as ttk
 
 from Localization import TEXT, TECH_NAME, UNIT_NAME
 from TriggerAbstract import getPlayerAbstract
-from Util import MappedCombobox
+from Util import EntryU, MappedCombobox
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -46,11 +46,11 @@ class DisablesView(ttk.Frame):
 
     def getDisablesList(self, player: int, category: str) -> list[int] | None:
         if category == 'unit':
-            return self.app.activeScenario.player_manager.players[player].disabled_units
+            return self.app.pm.players[player].disabled_units
         elif category == 'building':
-            return self.app.activeScenario.player_manager.players[player].disabled_buildings
+            return self.app.pm.players[player].disabled_buildings
         elif category == 'tech':
-            return self.app.activeScenario.player_manager.players[player].disabled_techs
+            return self.app.pm.players[player].disabled_techs
 
     def updateTree(self):
         self.tvDisabled.clear()
@@ -60,7 +60,7 @@ class DisablesView(ttk.Frame):
 
     def loadScen(self):
         playerDict = {i:getPlayerAbstract(i) \
-            for i in range(1, self.app.activeScenario.player_manager.active_players + 1)}
+            for i in range(1, self.app.pm.active_players + 1)}
         self.cbPlayer.update_mapping(playerDict)
         self.cbPlayer.current(0)
 
@@ -71,7 +71,10 @@ class DisablesView(ttk.Frame):
         if self.disablesClipboard:
             player = self.varPlayer.get()
             category, disableList = self.disablesClipboard
-            self.getDisablesList(player, category)[:] = disableList
+            targetList = self.getDisablesList(player, category)
+            if targetList != disableList:
+                targetList[:] = disableList
+                self.app.modified = True
             if category == self.varCategory.get():
                 self.updateTree()
             else:
@@ -80,8 +83,14 @@ class DisablesView(ttk.Frame):
     def _copyToAll(self):
         sourcePlayer = self.varPlayer.get()
         sourceList = self.currentDisablesList()
-        for p in [i for i in range(1, self.app.activeScenario.player_manager.active_players + 1) if i != sourcePlayer]:
-            self.getDisablesList(p, self.varCategory.get())[:] = sourceList
+        changed = False
+        for p in [i for i in range(1, self.app.pm.active_players + 1) if i != sourcePlayer]:
+            targetList = self.getDisablesList(p, self.varCategory.get())
+            if targetList != sourceList:
+                targetList[:] = sourceList
+                changed = True
+        if changed:
+            self.app.modified = True
 
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
@@ -221,7 +230,7 @@ class DisablesView(ttk.Frame):
         fList = ttk.Frame(self)
         fList.grid(row=0, column=column, sticky=NSEW, padx=padx, pady=self.app.dpi(10))
 
-        eFilter = ttk.Entry(fList, textvariable=var)
+        eFilter = EntryU(fList, textvariable=var)
         eFilter.pack(side=TOP,fill=X)
         lfList = ttk.LabelFrame(fList, text=title)
         lfList.pack(side=TOP,fill=BOTH,expand=YES)
@@ -242,9 +251,11 @@ class DisablesView(ttk.Frame):
         if direction == 'left':
             for item in roots:
                 disabled.append(source.getNodeId(item))
+                self.app.modified = True
         else:
             for item in roots:
                 disabled.remove(source.getNodeId(item))
+                self.app.modified = True
         DisablesView._transferItems(source, target, roots)
 
     def _moveAll(self, source: DisablesTreeView, target: DisablesTreeView,
@@ -254,9 +265,11 @@ class DisablesView(ttk.Frame):
         if direction == 'left':
             for item in roots:
                 disabled.append(source.getNodeId(item))
+                self.app.modified = True
         else:
             for item in roots:
                 disabled.remove(source.getNodeId(item))
+                self.app.modified = True
         DisablesView._transferItems(source, target, roots)
 
     @staticmethod

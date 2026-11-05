@@ -1,3 +1,4 @@
+import logging
 import math
 import re
 import time
@@ -463,7 +464,254 @@ class ListValueButton(ValueButton):
         self.internal_var: IntListVar = IntListVar()
         super().__init__(master, variable, encodeMethod, **kwargs)
 
-class PairValueEntry(ttk.Entry):
+class EntryU(ttk.Entry):
+    """Entry widget with local undo and redo history."""
+
+    _CONTROL_MASK = 0x0004
+    _SHIFT_MASK = 0x0001
+
+    MODIFIER_KEYS = {
+        'shift_l', 'shift_r',
+        'control_l', 'control_r',
+        'alt_l', 'alt_r',
+        'caps_lock',
+        'meta_l', 'meta_r',
+        'super_l', 'super_r',
+    }
+
+    NAVIGATION_KEYS = {
+        'left', 'right', 'up', 'down',
+        'home', 'end',
+        'prior', 'next',
+    }
+
+    def __init__(self, master=None, **kwargs):
+        super().__init__(master, **kwargs)
+        self._undo_stack = [self._capture_state()]
+        self._redo_stack = []
+        self._tracking_event = False
+        self._performing_command = False
+        self._history_action = False
+        self._coalesce_open = False
+        self._pending_typing = False
+        self._pending_before_state = None
+        self._edit_after_id = None
+
+        self._textvariable_name = None
+        self._trace_command = None
+        self._sync_textvariable_trace()
+
+        self.bind('<KeyPress>', self._on_edit_input, add='+')
+        self.bind('<ButtonPress-1>', self._on_pointer_edit, add='+')
+        self.bind('<ButtonPress-2>', self._on_pointer_edit, add='+')
+        for sequence in (
+            '<<Paste>>',
+            '<<Cut>>',
+            '<<Clear>>',
+            '<<PasteSelection>>',
+            '<ButtonRelease-2>',
+        ):
+            self.bind(sequence, self._on_edit_input, add='+')
+
+        self.bind('<<Undo>>', self._on_undo_event, add='+')
+        self.bind('<<Redo>>', self._on_redo_event, add='+')
+        self.bind('<Destroy>', self._on_destroy, add='+')
+
+    def configure(self, cnf=None, **kwargs):
+        result = super().configure(cnf, **kwargs)
+        if hasattr(self, '_undo_stack'):
+            self._sync_textvariable_trace()
+        return result
+
+    config = configure
+
+    def _sync_textvariable_trace(self):
+        textvariable_name = self.cget('textvariable')
+        if textvariable_name == self._textvariable_name:
+            return
+
+        if self._trace_command is not None:
+            self.tk.call(
+                'trace', 'remove', 'variable', self._textvariable_name,
+                'write', self._trace_command
+            )
+            self._root().deletecommand(self._trace_command)
+            self._trace_command = None
+
+        self._textvariable_name = textvariable_name
+        if textvariable_name:
+            self._trace_command = self._root().register(self._on_variable_write)
+            self.tk.call(
+                'trace', 'add', 'variable', textvariable_name,
+                'write', self._trace_command
+            )
+
+        state = self._capture_state()
+        self._undo_stack[:] = [state]
+        self._redo_stack.clear()
+        self._coalesce_open = False
+
+    def _capture_state(self):
+        selection = None
+        if self.selection_present():
+            selection = (self.index('sel.first'), self.index('sel.last'))
+        return (self.get(), self.index('insert'), selection)
+
+    def _restore_state(self, state):
+        text, cursor, selection = state
+        self._history_action = True
+        try:
+            if self._textvariable_name:
+                self.tk.globalsetvar(self._textvariable_name, text)
+            else:
+                ttk.Entry.delete(self, 0, END)
+                ttk.Entry.insert(self, 0, text)
+            self.icursor(cursor)
+            self.selection_clear()
+            if selection is not None:
+                self.selection_range(*selection)
+        finally:
+            self._history_action = False
+
+    def _record_edit(self, before, after, typing=False):
+        if before[0] == after[0]:
+            return
+        self._undo_stack[-1] = before
+
+        if typing and self._coalesce_open:
+            self._undo_stack[-1] = after
+        else:
+            self._undo_stack.append(after)
+
+        self._redo_stack.clear()
+        self._coalesce_open = typing
+
+    def _on_edit_input(self, event):
+        keysym = (getattr(event, 'keysym', '') or '').lower()
+        if keysym in self.MODIFIER_KEYS:
+            return
+        if keysym in self.NAVIGATION_KEYS:
+            self._coalesce_open = False
+            return
+
+        state = getattr(event, 'state', 0)
+        if state & self._CONTROL_MASK and keysym in ('z', 'y'):
+            self._cancel_pending_capture()
+            if keysym == 'y' or state & self._SHIFT_MASK:
+                self.edit_redo()
+            else:
+                self.edit_undo()
+            return 'break'
+
+        char = getattr(event, 'char', '') or ''
+        typing = (
+            len(char) == 1
+            and char.isprintable()
+        )
+        if not typing:
+            self._coalesce_open = False
+        self._tracking_event = True
+        if self._edit_after_id is None:
+            self._pending_typing = typing
+            self._pending_before_state = self._capture_state()
+            self._edit_after_id = self.after_idle(self._capture_edit)
+        else:
+            self._pending_typing = self._pending_typing and typing
+
+    def _on_pointer_edit(self, _event):
+        self._coalesce_open = False
+
+    def _capture_edit(self):
+        self._edit_after_id = None
+        self._tracking_event = False
+        state = self._capture_state()
+        if state[0] != self._pending_before_state[0]:
+            self._record_edit(self._pending_before_state, state, self._pending_typing)
+        self._pending_typing = False
+        self._pending_before_state = None
+
+    def _on_variable_write(self, *_):
+        if self._tracking_event or self._performing_command or self._history_action:
+            return
+        state = self._capture_state()
+        self._undo_stack[:] = [state]
+        self._redo_stack.clear()
+        self._coalesce_open = False
+
+    def _cancel_pending_capture(self):
+        if self._edit_after_id is not None:
+            self.after_cancel(self._edit_after_id)
+            self._edit_after_id = None
+        self._tracking_event = False
+        self._pending_typing = False
+        self._pending_before_state = None
+
+    def _on_undo_event(self, _event):
+        self._cancel_pending_capture()
+        self.edit_undo()
+        return 'break'
+
+    def _on_redo_event(self, _event):
+        self._cancel_pending_capture()
+        self.edit_redo()
+        return 'break'
+
+    def edit_undo(self):
+        self._coalesce_open = False
+        if len(self._undo_stack) < 2:
+            return
+        self._redo_stack.append(self._undo_stack.pop())
+        self._restore_state(self._undo_stack[-1])
+
+    def edit_redo(self):
+        self._coalesce_open = False
+        if not self._redo_stack:
+            return
+        state = self._redo_stack.pop()
+        self._undo_stack.append(state)
+        self._restore_state(state)
+
+    def insert(self, index, string):
+        before = self._capture_state()
+        self._performing_command = True
+        try:
+            super().insert(index, string)
+        finally:
+            self._performing_command = False
+        state = self._capture_state()
+        if state[0] != before[0]:
+            self._record_edit(before, state)
+        self._coalesce_open = False
+
+    def delete(self, first, last=None):
+        before = self._capture_state()
+        self._performing_command = True
+        try:
+            if last is None:
+                super().delete(first)
+            else:
+                super().delete(first, last)
+        finally:
+            self._performing_command = False
+        state = self._capture_state()
+        if state[0] != before[0]:
+            self._record_edit(before, state)
+        self._coalesce_open = False
+
+    def _on_destroy(self, event):
+        if event.widget is not self:
+            return
+        self._cancel_pending_capture()
+        if self._trace_command is not None:
+            self.tk.call(
+                'trace', 'remove', 'variable', self._textvariable_name,
+                'write', self._trace_command
+            )
+            self._root().deletecommand(self._trace_command)
+            self._trace_command = None
+
+
+class PairValueEntry(EntryU):
     """Entry widget that binds a variable to its text, allowing for two-way updates."""
     def __init__(self, master, variable: ttk.StringVar, **kwargs):
         self.variable = variable
@@ -751,4 +999,4 @@ class DebugTimeCount(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.end_time = time.time()
-        print(self.printFmt.format(self.end_time - self.start_time))
+        logging.info(self.printFmt.format(self.end_time - self.start_time))

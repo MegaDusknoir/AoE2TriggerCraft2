@@ -15,7 +15,7 @@ from AoE2ScenarioParser.objects.support.trigger_ce_lock import TriggerCELock
 
 from Localization import TEXT
 from TriggerAbstract import *
-from Util import Tooltip, ValueSelectButton
+from Util import EntryU, Tooltip, ValueSelectButton
 from CeAttributesManager import CeAttributes
 from VirtualEffects import TRIGGER_CRAFT_METADATA_HEADER, transform_virtual_effect_all_in_one
 
@@ -102,7 +102,7 @@ TRIGGER_METADATA_DESCRIPTION_ORDER = 16777215
 class TriggerView(ttk.Frame):
     @property
     def tm(self):
-        return self.app.triggerManager
+        return self.app.tm
 
     @property
     def tl(self):
@@ -276,7 +276,7 @@ class TriggerView(ttk.Frame):
 
         def createTriggerListFilter():
             self.varTriggerFilter = ttk.StringVar()
-            eFilter = ttk.Entry(self, textvariable=self.varTriggerFilter)
+            eFilter = EntryU(self, textvariable=self.varTriggerFilter)
             eFilter.pack(fill=X, padx=self.app.dpi((10, 5)), pady=self.app.dpi((0, 5)))
             self.varTriggerFilter.trace_add('write', lambda *arg: self.__triggerFilter(self.varTriggerFilter.get(), self.tl.focus()))
             eFilter.bind('<Return>', lambda *arg: self.__triggerFilter(self.varTriggerFilter.get(), self.tl.focus()))
@@ -290,6 +290,8 @@ class TriggerView(ttk.Frame):
         createControlPanel()
         createTriggerList()
         createTriggerListFilter()
+
+    # region TriggerViewHelper
 
     def __triggerFilter(self, sstr: str, curItem: str):
         def _nextItem(item: str) -> str:
@@ -374,6 +376,8 @@ class TriggerView(ttk.Frame):
                 itemCE = self.tl.insert(itemTrigger, END, text=abstractEffect(effect),
                                                    tceId=eId, tceDisplayId=eDisplayId, image=self.app.imgEffectEnabled, tceType='effect')
 
+    # endregion TriggerViewHelper
+
     # region TriggerViewOperation
 
     def tceCopyToClipboard(self, cut=False):
@@ -414,6 +418,7 @@ class TriggerView(ttk.Frame):
             newTrigger = copy.deepcopy(self.tceClipboard)
             newTrigger.trigger_id = len(self.tm.triggers)
             self.tm.triggers.append(newTrigger)
+            self.app.modified = True
             self.tm.trigger_display_order.insert(insertIndex, self.tm.trigger_display_order.pop())
             self.triggerNewAfter(insertIndex - 1, newTrigger)
             self.app.fMapViewTab.markTriggerLayerDirty()
@@ -431,6 +436,7 @@ class TriggerView(ttk.Frame):
                     insertIndex += 1
                 newCondition = copyCondition(self.tceClipboard, trigger)
                 trigger.condition_order.insert(insertIndex, trigger.condition_order.pop())
+                self.app.modified = True
                 self.ceAdd(parent, 'condition', newCondition, insertIndex)
             else:
                 if self.tl.itemType(curItem) in ['trigger', 'condition']:
@@ -440,6 +446,7 @@ class TriggerView(ttk.Frame):
                     insertIndex += 1
                 newEffect = copyEffect(self.tceClipboard, trigger)
                 trigger.effect_order.insert(insertIndex, trigger.effect_order.pop())
+                self.app.modified = True
                 self.ceAdd(parent, 'effect', newEffect, insertIndex)
             self.app.fMapViewTab.markTriggerLayerDirty()
 
@@ -454,12 +461,13 @@ class TriggerView(ttk.Frame):
         return None
 
     def createMetadataContainer(self) -> Trigger:
-        return self.triggerAdd(
+        trigger, _ = self.triggerAdd(
             name='__metadata__',
             setFocus=False,
             enabled=0,
             display_as_objective=0,
             description_order=TRIGGER_METADATA_DESCRIPTION_ORDER)
+        return trigger
 
     def commandTriggerAdd(self):
         """New a trigger after selected trigger, append if nothing selected."""
@@ -473,24 +481,26 @@ class TriggerView(ttk.Frame):
             curItem = self.tl.getTriggerNode(curItem)
             insertDisplayId = self.tl.index(curItem) + 1
         
-        self.triggerAdd(triggerName, insertDisplayId)
+        _, newItem = self.triggerAdd(triggerName, insertDisplayId)
 
         # See if out of sight
-        if not self.tl.bbox(self.tl.next(curItem)):
-            self.tl.see(self.tl.next(curItem))
+        if not self.tl.bbox(newItem):
+            self.tl.see(newItem)
 
-    def triggerAdd(self, name, insert=END, setFocus=True, **kwargs) -> Trigger:
+    def triggerAdd(self, name, insert=END, setFocus=True, **kwargs) -> tuple[Trigger, str]:
+        """Add a trigger and its treeview item"""
         if insert == END:
             insert = len(self.tm.trigger_display_order)
 
         # Call AoE2SP
         newTrigger = self.tm.add_trigger(name=name, **kwargs)
+        self.app.modified = True
         self.tm.trigger_display_order.insert(insert, self.tm.trigger_display_order.pop())
 
-        self.triggerNewAfter(insert - 1, newTrigger, setFocus=setFocus)
-        return newTrigger
+        newItem = self.triggerNewAfter(insert - 1, newTrigger, setFocus=setFocus)
+        return newTrigger, newItem
 
-    def triggerNewAfter(self, afterIndex, trigger:Trigger, ignoreIndex=False, setFocus=True):
+    def triggerNewAfter(self, afterIndex, trigger:Trigger, ignoreIndex=False, setFocus=True) -> str:
         idNewTrigger = len(self.tl.get_children(""))
         triggerImage = self.app.getTriggerIcon(trigger)
         if ignoreIndex == False:
@@ -517,6 +527,7 @@ class TriggerView(ttk.Frame):
             effect = trigger.effects[eId]
             itemCE = self.tl.insert(itemTrigger, END, text=abstractEffect(effect),
                                                tceId=eId, tceDisplayId=eDisplayId, image=self.app.imgEffectEnabled, tceType='effect')
+        return itemTrigger
 
     def ceAdd(self, parent: str, tag: str, obj: Effect|Condition, insertIndex:int=None):
         self.tl.item(parent, open=True)
@@ -572,6 +583,7 @@ class TriggerView(ttk.Frame):
             insertIndex = len(trigger.effects)
 
         newEffect = trigger.new_effect.none()
+        self.app.modified = True
         trigger.effect_order.insert(insertIndex, trigger.effect_order.pop())
 
         self.ceAdd(parent, 'effect', newEffect, insertIndex)
@@ -591,6 +603,7 @@ class TriggerView(ttk.Frame):
             insertIndex = len(trigger.conditions)
 
         newCondition = trigger.new_condition.none()
+        self.app.modified = True
         trigger.condition_order.insert(insertIndex, trigger.condition_order.pop())
 
         self.ceAdd(parent, 'condition', newCondition, insertIndex)
@@ -632,7 +645,7 @@ class TriggerView(ttk.Frame):
 
             # Call AoE2SP
             self.tm.remove_trigger(idToDelete)
-            # print(self.tm.trigger_display_order)
+            # logging.debug(self.tm.trigger_display_order)
 
         elif nodeType == 'condition':
             for child in self.tl.get_children(parent):
@@ -669,6 +682,7 @@ class TriggerView(ttk.Frame):
             # Need manually fix order (ASP 0.9.4)
             trigger.effect_order = _orderRemoveId(old_order, displayIdToDelete)
 
+        self.app.modified = True
         self.tl.delete(curItem)
         if nextSelection != '':
             self.tl.focus(nextSelection)
@@ -707,6 +721,7 @@ class TriggerView(ttk.Frame):
                     trigger = self.tm.get_trigger(triggerId)
                     trigger.effect_order[prevDisplayId], trigger.effect_order[displayId]\
                         = trigger.effect_order[displayId], trigger.effect_order[prevDisplayId]
+                self.app.modified = True
                 # See if out of sight
                 if not self.tl.bbox(curItem):
                     self.tl.see(curItem)
@@ -740,6 +755,7 @@ class TriggerView(ttk.Frame):
                     trigger = self.tm.get_trigger(triggerId)
                     trigger.effect_order[nextDisplayId], trigger.effect_order[displayId]\
                         = trigger.effect_order[displayId], trigger.effect_order[nextDisplayId]
+                self.app.modified = True
                 # See if out of sight
                 if not self.tl.bbox(curItem):
                     self.tl.see(curItem)
@@ -757,7 +773,7 @@ class TriggerView(ttk.Frame):
             duplicatedTrigger = self.tm.copy_trigger(idToDuplicate, append_after_source=False, add_suffix=False)
             duplicatedTrigger.name = TEXT['formatDuplicatedTriggerName'].format(duplicatedTrigger.name)
             self.tm.trigger_display_order.insert(displayIdToDuplicate + 1, self.tm.trigger_display_order.pop())
-            # print(self.tm.trigger_display_order)
+            # logging.debug(self.tm.trigger_display_order)
             self.triggerNewAfter(displayIdToDuplicate, duplicatedTrigger)
         elif nodeType == 'condition':
             trigger = self.tm.get_trigger(triggerId)
@@ -771,6 +787,7 @@ class TriggerView(ttk.Frame):
             insertIndex = displayIdToDuplicate + 1
             trigger.effect_order.insert(insertIndex, trigger.effect_order.pop())
             self.ceAdd(parent, 'effect', newEffect, insertIndex)
+        self.app.modified = True
 
         # See if out of sight
         if not self.tl.bbox(self.tl.next(curItem)):
@@ -785,7 +802,7 @@ class TriggerView(ttk.Frame):
         triggerId = self.tl.getNodeId(parent)[0]
         idToDuplicate, displayIdToDuplicate = self.tl.getNodeId(curItem)
         next = self.tl.next(curItem)
-        playerCount = self.app.activeScenario.player_manager.active_players
+        playerCount = self.app.pm.active_players
         create_copy_for_players = list(range(1, playerCount+1))
         unit_mappings = [m["mapping"] for m in self.app.scenOptions.mappings.unitDuplicateMappings if m['enabled']] \
             if self.app.options.useUnitDuplicateMappings.get() else []
@@ -820,6 +837,8 @@ class TriggerView(ttk.Frame):
                 if trigger.description.endswith('<Original>'):
                     trigger.description = trigger.description[:-len('<Original>')]
             newTriggers = self.copyTriggerPerPlayer(PlayerId.ONE, trigger, **args, **argsTrigger)
+            if newTriggers:
+                self.app.modified = True
             if self.app.options.addDuplicateMark.get():
                 if not trigger.description.endswith('<Original>'):
                     trigger.description += '<Original>'
@@ -840,6 +859,8 @@ class TriggerView(ttk.Frame):
             condition = trigger.conditions[idToDuplicate]
             newConditions = self.copyCePerPlayer(PlayerId.ONE, condition, trigger, **args)
             newCeCount = len(newConditions)
+            if newCeCount:
+                self.app.modified = True
             trigger.condition_order = \
                 trigger.condition_order[0 : displayIdToDuplicate + 1] + \
                 trigger.condition_order[-newCeCount:] + \
@@ -853,6 +874,8 @@ class TriggerView(ttk.Frame):
             effect = trigger.effects[idToDuplicate]
             newEffects = self.copyCePerPlayer(PlayerId.ONE, effect, trigger, **args)
             newCeCount = len(newEffects)
+            if newCeCount:
+                self.app.modified = True
             trigger.effect_order = \
                 trigger.effect_order[0 : displayIdToDuplicate + 1] + \
                 trigger.effect_order[-newCeCount:] + \
@@ -908,7 +931,7 @@ class TriggerView(ttk.Frame):
         triggerId = self.tl.getNodeId(parent)[0]
         id, displayId = self.tl.getNodeId(curItem)
         next = self.tl.next(curItem)
-        playerCount = self.app.activeScenario.player_manager.active_players
+        playerCount = self.app.pm.active_players
         if nodeType == 'trigger':
             if displayId + playerCount > len(self.tm.triggers):
                 self.app.statusBarMessage(TEXT['noticeNotEnoughTriggersToDelete'])
@@ -1268,7 +1291,7 @@ class TriggerView(ttk.Frame):
         toDuplicateTriggersIdList = self.tm.trigger_display_order[displayIdBegin: displayIdEnd]
         newTriggerOrder = self.tm.trigger_display_order[0: displayIdBegin]
         newTriggerOrderTail = self.tm.trigger_display_order[displayIdEnd:]
-        playerCount = self.app.activeScenario.player_manager.active_players
+        playerCount = self.app.pm.active_players
         create_copy_for_players = list(range(1, playerCount+1))
         for id in toDuplicateTriggersIdList:
             # Duplicate trigger
@@ -1291,6 +1314,8 @@ class TriggerView(ttk.Frame):
                                                         + self.app.scenOptions.mappings.areaDuplicateMappings],
                                                     change_message_color=self.app.options.changeMessageColor.get(),
                                                     change_virtual_effects=self.app.options.changeVirtualEffects.get())
+            if newTriggers:
+                self.app.modified = True
             if self.app.options.addDuplicateMark.get():
                 if not trigger.description.endswith('<Original>'):
                     trigger.description += '<Original>'
@@ -1339,7 +1364,7 @@ class TriggerView(ttk.Frame):
         #             self.tl.delete(items[i])
         #     next = ''
 
-        playerCount = self.app.activeScenario.player_manager.active_players
+        playerCount = self.app.pm.active_players
         if (displayIdEnd - displayIdBegin) % playerCount != 0:
             self.app.statusBarMessage(TEXT['noticeFormatValueRangeInvalid'].format(TEXT['noticeValueRangeErrMsgMustBeMultiple']))
             return
@@ -1356,6 +1381,8 @@ class TriggerView(ttk.Frame):
             itemTrigger = next
         # Delete triggers
         self.tm.remove_triggers(toRemoveTriggersIdList)
+        if toRemoveTriggersIdList:
+            self.app.modified = True
         # Update IDs
         for displayId, child in enumerate(self.tl.get_children('')):
             if child == '':
@@ -1384,6 +1411,7 @@ class TriggerView(ttk.Frame):
             itemTrigger = next
         # Delete triggers
         self.tm.remove_triggers(toRemoveTriggersIdList)
+        self.app.modified = True
         # Update IDs
         for displayId, child in enumerate(self.tl.get_children('')):
             if child == '':
@@ -1434,11 +1462,15 @@ class TriggerView(ttk.Frame):
             self.tm.trigger_display_order[displayIdBegin : displayIdEnd] + \
             self.tm.trigger_display_order[displayIdTarget : displayIdBegin] + \
             self.tm.trigger_display_order[displayIdEnd :]
+        self.app.modified = True
 
     def itemSortByDisplay(self):
         if len(self.tm.triggers) == 0:
             return
+        previousOrder = self.tm.trigger_display_order.copy()
         self.tm.reorder_triggers(self.tm.trigger_display_order)
+        if previousOrder != self.tm.trigger_display_order:
+            self.app.modified = True
         # Update IDs
         for displayId, child in enumerate(self.tl.get_children('')):
             if child == '':
@@ -1448,8 +1480,18 @@ class TriggerView(ttk.Frame):
         self.app.statusBarMessage(TEXT['noticeSortCompleted'])
 
     def itemSortCeByDisplay(self):
+        ordersChanged = False
         for trigger in self.tm.triggers:
+            previousConditionOrder = trigger.condition_order.copy()
+            previousEffectOrder = trigger.effect_order.copy()
             reorderCEs(trigger, True, True)
+            if (
+                previousConditionOrder != trigger.condition_order
+                or previousEffectOrder != trigger.effect_order
+            ):
+                ordersChanged = True
+        if ordersChanged:
+            self.app.modified = True
         # Update IDs
         for displayId, child in enumerate(self.tl.get_children('')):
             if child == '':

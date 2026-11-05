@@ -7,7 +7,7 @@ import ttkbootstrap as ttk
 from AoE2ScenarioParser.objects.data_objects.trigger import Trigger
 
 from Localization import TEXT
-from Util import ReCompiled, Tooltip, ValueSelectButton, ScenarioVersion
+from Util import EntryU, ReCompiled, Tooltip, ValueSelectButton, ScenarioVersion
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -19,7 +19,7 @@ class TriggerInfoView(ttk.Frame):
 
     @property
     def tm(self):
-        return self.app.triggerManager
+        return self.app.tm
 
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
@@ -39,7 +39,7 @@ class TriggerInfoView(ttk.Frame):
         ## Column 0
         lTName = ttk.Label(self, text=TEXT['labelTriggerName'])
         lTName.grid(column=0, row=0, sticky=EW, padx=self.app.dpi(10))
-        eTName = ttk.Entry(self, textvariable=self.varTName)
+        eTName = EntryU(self, textvariable=self.varTName)
         self.varTName.trace_add('write', self.__modifyTriggerName)
         eTName.grid(column=0, row=1, sticky=EW+N, padx=self.app.dpi(10))
         cbTEnable = ttk.Checkbutton(self, text=TEXT['btnTriggerEnable'], bootstyle=(ttk.ROUND, ttk.TOGGLE),
@@ -54,7 +54,7 @@ class TriggerInfoView(ttk.Frame):
             cbTExecuteOnLoad.grid(column=0, row=4, sticky=W, padx=self.app.dpi(10), pady=self.app.dpi((10,0)))
         lTDscrOrder = ttk.Label(self, text=TEXT['labelTriggerDescriptionOrder'])
         lTDscrOrder.grid(column=0, row=5, sticky=EW, padx=self.app.dpi(10), pady=self.app.dpi(10))
-        eTDscrOrder = ttk.Entry(self, textvariable=self.varTDescriptionOrder, validate="key",
+        eTDscrOrder = EntryU(self, textvariable=self.varTDescriptionOrder, validate="key",
                                     validatecommand=(self.register(lambda v: v.isdigit() or v == ''), '%P'))
         self.varTDescriptionOrder.trace_add('write', self.__modifyTriggerDescriptionOrder)
         eTDscrOrder.grid(column=0, row=6, sticky=EW, padx=self.app.dpi(10))
@@ -69,7 +69,7 @@ class TriggerInfoView(ttk.Frame):
         ## Column 1
         lTDescription = ttk.Label(self, text=TEXT['labelTriggerDescription'],width=self.app.dpi(30))
         lTDescription.grid(column=1, row=0, columnspan=2, sticky=EW)
-        self.tTDescription = ttk.Text(self, height=2, width=2)
+        self.tTDescription = ttk.Text(self, height=2, width=2, undo=True)
         self.tTDescription.bind('<<Modified>>', self.__modifyTriggerDescription)
         self.tTDescription.grid(column=1, row=1, columnspan=2, rowspan=8, sticky=NSEW)
         cbTAsObjective = ttk.Checkbutton(self, text=TEXT['btnTriggerAsObjective'], bootstyle=(ttk.ROUND, ttk.TOGGLE),
@@ -79,7 +79,7 @@ class TriggerInfoView(ttk.Frame):
         fTDescriptionStringTable.grid(column=1, row=9, columnspan=2, sticky=EW, pady=self.app.dpi(10))
         lTDescriptionStringTable = ttk.Label(fTDescriptionStringTable, text=TEXT['labelTriggerDescriptionStringTableID'])
         lTDescriptionStringTable.pack(side=LEFT, padx=(0, self.app.dpi(10)))
-        eTDescriptionStringTable = ttk.Entry(
+        eTDescriptionStringTable = EntryU(
             fTDescriptionStringTable,
             textvariable=self.varTDescriptionStringTable,
             validate="key",
@@ -90,7 +90,7 @@ class TriggerInfoView(ttk.Frame):
         ## Column 2
         lTShortDscr = ttk.Label(self, text=TEXT['labelTriggerShortDescription'],width=self.app.dpi(30))
         lTShortDscr.grid(column=3, row=0, columnspan=2, sticky=EW, padx=self.app.dpi(10))
-        self.tTShortDscr = ttk.Text(self, height=2, width=2)
+        self.tTShortDscr = ttk.Text(self, height=2, width=2, undo=True)
         self.tTShortDscr.bind('<<Modified>>', self.__modifyTriggerShortDescription)
         self.tTShortDscr.grid(column=3, row=1, columnspan=2, rowspan=8, sticky=NSEW, padx=self.app.dpi(10))
         cbTOnScreen = ttk.Checkbutton(self, text=TEXT['btnTriggerOnScreen'], bootstyle=(ttk.ROUND, ttk.TOGGLE),
@@ -100,7 +100,7 @@ class TriggerInfoView(ttk.Frame):
         fTShortDscrStringTable.grid(column=3, row=9, columnspan=2, sticky=EW, padx=self.app.dpi(10), pady=self.app.dpi(10))
         lTShortDscrStringTable = ttk.Label(fTShortDscrStringTable, text=TEXT['labelTriggerShortDescriptionStringTableID'])
         lTShortDscrStringTable.pack(side=LEFT, padx=(0, self.app.dpi(10)))
-        eTShortDscrStringTable = ttk.Entry(
+        eTShortDscrStringTable = EntryU(
             fTShortDscrStringTable, 
             textvariable=self.varTShortDescriptionStringTable, 
             validate="key", 
@@ -125,6 +125,7 @@ class TriggerInfoView(ttk.Frame):
             newName = self.varTName.get()
             self.tl.item(curItem, text=' ' + newName)
             trigger.name = newName
+            self.app.modified = True
 
     def __setTriggerEnableAndLoop(self):
         curItem = self.tl.focus()
@@ -147,6 +148,7 @@ class TriggerInfoView(ttk.Frame):
                     self.tl.item(curItem, image=self.app.imgTriggerDisabled)
                     trigger.enabled = 0
                 trigger.looping = 0
+            self.app.modified = True
 
     def __setTriggerExecuteOnLoad(self):
         curItem = self.tl.focus()
@@ -154,50 +156,40 @@ class TriggerInfoView(ttk.Frame):
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
             if self.app.editorVersion >= ScenarioVersion('1.55'):
-                if self.varTExecuteOnLoad.get() == True:
-                    trigger.execute_on_load = 1
-                else:
-                    trigger.execute_on_load = 0
+                trigger.execute_on_load = 1 if self.varTExecuteOnLoad.get() else 0
+                self.app.modified = True
 
     def __setTriggerAsObjective(self):
         curItem = self.tl.focus()
         if self.tl.itemType(curItem) == 'trigger':
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
-            if self.varTAsObjective.get() == True:
-                trigger.display_as_objective = 1
-            else:
-                trigger.display_as_objective = 0
+            trigger.display_as_objective = 1 if self.varTAsObjective.get() else 0
+            self.app.modified = True
 
     def __setTriggerOnScreen(self):
         curItem = self.tl.focus()
         if self.tl.itemType(curItem) == 'trigger':
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
-            if self.varTOnScreen.get() == True:
-                trigger.display_on_screen = 1
-            else:
-                trigger.display_on_screen = 0
+            trigger.display_on_screen = 1 if self.varTOnScreen.get() else 0
+            self.app.modified = True
 
     def __setTriggerMakeHeader(self):
         curItem = self.tl.focus()
         if self.tl.itemType(curItem) == 'trigger':
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
-            if self.varTMakeHeader.get() == True:
-                trigger.header = 1
-            else:
-                trigger.header = 0
+            trigger.header = 1 if self.varTMakeHeader.get() else 0
+            self.app.modified = True
 
     def __setTriggerMuteObjective(self):
         curItem = self.tl.focus()
         if self.tl.itemType(curItem) == 'trigger':
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
-            if self.varTMuteObjective.get() == True:
-                trigger.mute_objectives = 1
-            else:
-                trigger.mute_objectives = 0
+            trigger.mute_objectives = 1 if self.varTMuteObjective.get() else 0
+            self.app.modified = True
 
     def __modifyTriggerDescriptionOrder(self, *args):
         curItem = self.tl.focus()
@@ -209,7 +201,9 @@ class TriggerInfoView(ttk.Frame):
                 descriptionOrder = int(descriptionOrder)
             else:
                 descriptionOrder = 0
-            trigger.description_order = descriptionOrder
+            if trigger.description_order != descriptionOrder:
+                trigger.description_order = descriptionOrder
+                self.app.modified = True
 
     def __modifyTriggerDescriptionStringTable(self, *args):
         curItem = self.tl.focus()
@@ -221,7 +215,9 @@ class TriggerInfoView(ttk.Frame):
                 descriptionStringTable = int(descriptionStringTable)
             else:
                 descriptionStringTable = -1
-            trigger.description_stid = descriptionStringTable
+            if trigger.description_stid != descriptionStringTable:
+                trigger.description_stid = descriptionStringTable
+                self.app.modified = True
 
     def __modifyTriggerShortDescriptionStringTable(self, *args):
         curItem = self.tl.focus()
@@ -233,7 +229,9 @@ class TriggerInfoView(ttk.Frame):
                 shortDescriptionStringTable = int(shortDescriptionStringTable)
             else:
                 shortDescriptionStringTable = -1
-            trigger.short_description_stid = shortDescriptionStringTable
+            if trigger.short_description_stid != shortDescriptionStringTable:
+                trigger.short_description_stid = shortDescriptionStringTable
+                self.app.modified = True
 
     def __modifyTriggerDescription(self, *args):
         if self.tTDescription.edit_modified() == False:
@@ -244,7 +242,10 @@ class TriggerInfoView(ttk.Frame):
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
             description = self.tTDescription.get(1.0, 'end-1c')
-            trigger.description = description.replace('\n', '\r')
+            description = description.replace('\n', '\r')
+            if trigger.description != description:
+                trigger.description = description
+                self.app.modified = True
 
     def __modifyTriggerShortDescription(self, *args):
         if self.tTShortDscr.edit_modified() == False:
@@ -255,7 +256,10 @@ class TriggerInfoView(ttk.Frame):
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
             shortDescription = self.tTShortDscr.get(1.0, 'end-1c')
-            trigger.short_description = shortDescription.replace('\n', '\r')
+            shortDescription = shortDescription.replace('\n', '\r')
+            if trigger.short_description != shortDescription:
+                trigger.short_description = shortDescription
+                self.app.modified = True
 
     # endregion TriggerInfoMethods
 

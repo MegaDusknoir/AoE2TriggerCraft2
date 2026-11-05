@@ -7,7 +7,7 @@ import ttkbootstrap as ttk
 
 from Localization import TEXT
 from TriggerAbstract import *
-from Util import IntListVar, ListValueButton, PairValueEntry, Tooltip
+from Util import EntryU, IntListVar, ListValueButton, PairValueEntry, Tooltip
 
 if TYPE_CHECKING:
     from main import TCWindow
@@ -66,6 +66,7 @@ class MappingEditor(ttk.Frame):
             self.mappingsRef.append({"name": TEXT['formatNewMappingName'].format(newId), "enabled": True, "mapping": [[-1, -1, -1, -1],] * 9})
         elif self.mappingType == 'text':
             self.mappingsRef.append({"name": TEXT['formatNewMappingName'].format(newId), "enabled": True, "mapping": ['',] * 9})
+        self.app.modified = True
         newItem = self.ml.insert(END, id=newId, text=self.mappingsRef[-1]["name"])
         self.ml.focus(newItem)
         self.ml.selection_set(newItem)
@@ -85,6 +86,7 @@ class MappingEditor(ttk.Frame):
                 self.ml.setNodeId(child, id)
         self.ml.delete(curItem)
         del self.mappingsRef[idToDel]
+        self.app.modified = True
         if nextSelection != '':
             self.ml.focus(nextSelection)
             self.ml.selection_set(nextSelection)
@@ -103,6 +105,7 @@ class MappingEditor(ttk.Frame):
         self.ml.setNodeId(curItem, id)
         self.ml.setNodeId(prev, prevId)
         self.mappingsRef[prevId], self.mappingsRef[id] = self.mappingsRef[id], self.mappingsRef[prevId]
+        self.app.modified = True
         if not self.ml.bbox(curItem):
             self.ml.see(curItem)
 
@@ -120,6 +123,7 @@ class MappingEditor(ttk.Frame):
         self.ml.setNodeId(curItem, id)
         self.ml.setNodeId(next, nextId)
         self.mappingsRef[nextId], self.mappingsRef[id] = self.mappingsRef[id], self.mappingsRef[nextId]
+        self.app.modified = True
         if not self.ml.bbox(curItem):
             self.ml.see(curItem)
 
@@ -181,7 +185,7 @@ class MappingEditor(ttk.Frame):
         ttk.Label(fMappingHeader, text=TEXT['labelMappingEnable']).grid(row=0, column=1, sticky=W, padx=self.app.dpi((10,0)))
         self.varMappingName = ttk.StringVar()
         self.varMappingName.trace_add('write', lambda *args: self.__changeMappingName())
-        ttk.Entry(fMappingHeader, width=40, textvariable=self.varMappingName).grid(row=1, column=0, sticky=W)
+        EntryU(fMappingHeader, width=40, textvariable=self.varMappingName).grid(row=1, column=0, sticky=W)
         self.varMappingEnable = ttk.BooleanVar(value=True)
         ttk.Checkbutton(fMappingHeader, bootstyle=(ttk.ROUND, ttk.TOGGLE),
                         variable=self.varMappingEnable, command=self.__changeMappingEnable) \
@@ -238,7 +242,11 @@ class MappingEditor(ttk.Frame):
         if not curItem:
             return
         id = self.ml.getNodeId(curItem)
-        self.mappingsRef[id]["name"] = self.varMappingName.get()
+        name = self.varMappingName.get()
+        if self.mappingsRef[id]["name"] == name:
+            return
+        self.mappingsRef[id]["name"] = name
+        self.app.modified = True
         self.ml.item(curItem, text=self.varMappingName.get())
 
     def __changeMappingEnable(self):
@@ -247,6 +255,7 @@ class MappingEditor(ttk.Frame):
             return
         id = self.ml.getNodeId(curItem)
         self.mappingsRef[id]["enabled"] = self.varMappingEnable.get()
+        self.app.modified = True
 
     class MappingValueButton(ttk.Frame):
         @property
@@ -369,7 +378,7 @@ class MappingEditor(ttk.Frame):
         def __setUnit(self) -> None:
             if self.outer.nTabsLeft.select() \
             and self.outer.nTabsLeft.index('current') == self.outer.nTabsLeft.index(self.outer.fUEditor):
-                    unitId = self.outer.fUEditor.tvUnitList.getUnitFocusRefId()
+                    unitId = self.outer.ul.getUnitFocusRefId()
                     if unitId == None:
                         unitId = -1
                     self.lvbtn.internal_var.set([unitId, ])
@@ -382,20 +391,36 @@ class MappingEditor(ttk.Frame):
                 return
             id = self.ml.getNodeId(curItem)
             if self.mappingType == 'area':
-                self.mp.areaDuplicateMappings[id]["mapping"][self.player] = self.variable.get()
+                mapping = self.mp.areaDuplicateMappings[id]["mapping"]
+                value = self.variable.get()
+                if mapping[self.player] != value:
+                    mapping[self.player] = value
+                    self.outer.modified = True
             elif self.mappingType == 'tile':
-                self.mp.tileDuplicateMappings[id]["mapping"][self.player] = self.variable.get()
+                mapping = self.mp.tileDuplicateMappings[id]["mapping"]
+                value = self.variable.get()
+                if mapping[self.player] != value:
+                    mapping[self.player] = value
+                    self.outer.modified = True
 
         def __modifyUnit(self):
             curItem = self.ml.focus()
             if not curItem:
                 return
             id = self.ml.getNodeId(curItem)
-            self.mp.unitDuplicateMappings[id]["mapping"][self.player] = self.variable.get()[0]
+            mapping = self.mp.unitDuplicateMappings[id]["mapping"]
+            value = self.variable.get()[0]
+            if mapping[self.player] != value:
+                mapping[self.player] = value
+                self.outer.modified = True
 
         def __modifyText(self):
             curItem = self.ml.focus()
             if not curItem:
                 return
             id = self.ml.getNodeId(curItem)
-            self.mp.textDuplicateMappings[id]["mapping"][self.player] = self.textvariable.get()
+            mapping = self.mp.textDuplicateMappings[id]["mapping"]
+            value = self.textvariable.get()
+            if mapping[self.player] != value:
+                mapping[self.player] = value
+                self.outer.modified = True

@@ -79,19 +79,19 @@ class UnitTreeView(ttk.Treeview):
 class UnitView(ttk.Frame):
     @property
     def tm(self):
-        return self.app.triggerManager
+        return self.app.tm
 
     @property
     def tl(self):
-        return self.app.fTEditor.tvTriggerList
+        return self.app.tl
 
     @property
     def um(self):
-        return self.app.activeScenario.unit_manager
+        return self.app.um
 
     @property
     def pm(self):
-        return self.app.activeScenario.player_manager
+        return self.app.pm
 
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
