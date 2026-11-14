@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal
 from math import sqrt
 from tkinter.constants import *
@@ -11,7 +12,7 @@ import PIL.ImageTk
 from PIL.Image import Resampling
 from PIL import ImageColor
 
-from AoE2ScenarioParser.objects.managers.map_manager import MapManager
+from AoE2ScenarioParser.objects.managers.map_manager import MapManager, TerrainTile
 from Localization import TEXT, UNIT_NAME
 from TerrainPal import getTileColor
 from CommonPalette import AOE_PAL
@@ -21,6 +22,8 @@ from CeAttributesManager import CeAttributes
 
 if TYPE_CHECKING:
     from main import TCWindow
+
+logger = logging.getLogger(__name__.split('.')[-1])
 
 SQRT_8 = sqrt(8)
 class MapView(ttk.Frame):
@@ -46,6 +49,9 @@ class MapView(ttk.Frame):
     TRIGGER_AREA_COLOR = ImageColor.getcolor('#FFFF66CA', "RGBA")
     TRIGGER_TILE_COLOR = ImageColor.getcolor('#FFFF66CA', "RGBA")
     TRIGGER_LINE_COLOR = ImageColor.getcolor('#FFFFFFB5', "RGBA")
+    CHECKBOARD_COLOR_LIGHT = ImageColor.getcolor("#FFFFFF08", "RGBA")
+    CHECKBOARD_COLOR_DARK = ImageColor.getcolor("#00000008", "RGBA")
+    LAYER_MASK_COLOR = ImageColor.getcolor("#000000CC", "RGBA")
 
     def __init__(self, app: TCWindow, master = None, **kwargs):
         super().__init__(master, **kwargs)
@@ -54,23 +60,19 @@ class MapView(ttk.Frame):
 
         # [x1,y1,x2,y2]
         self.pointSelect = IntListVar(value=[-1,]*4)
+        self.drawAreaUpdateUnitList = False
 
         self.zvMapView = ZoomImageViewer(self,
                                         PIL.Image.new('RGB', (1,1)), bg="black",
                                         viewport_transform=self.__rotateMapViewport)
+        self.zvMapView.drag_enabled = self.app.fTPanel.active_tool == "select"
         self.zvMapView.pack(side=LEFT, fill=BOTH, expand=YES, anchor=CENTER)
-        self.zvMapView.bind('<ButtonRelease-1>', lambda e: \
-                            self.drawSetPoint1(
-                                self.__mapViewCoordinateConv(self.zvMapView.coords_conv(e.x,e.y))
-                                ))
-        self.zvMapView.bind('<Shift-ButtonRelease-1>', lambda e: \
-                            self.drawSetPoint2(
-                                self.__mapViewCoordinateConv(self.zvMapView.coords_conv(e.x,e.y))
-                                ))
-        self.zvMapView.bind('<Button-3>', lambda e: \
-                            self.drawClear())
-        self.zvMapView.bind('<Enter>', lambda e: self.app.statusBarMessage(TEXT['tooltipMapView'], layer='top'))
+        self.zvMapView.bind('<ButtonRelease-1>', self.__eventMapViewSetPoint1)
+        self.zvMapView.bind('<Shift-ButtonRelease-1>', self.__eventMapViewSetPoint2)
+        self.zvMapView.bind('<Button-3>', self.__eventMapViewClear)
+        self.zvMapView.bind('<Enter>', self.__eventShowTooltipMapView)
         self.zvMapView.bind('<Leave>', lambda e: self.app.statusBarMessage('', layer='top'))
+        self.zvMapView.bind_drag(self.__eventMapViewDrag)
 
         cfPanel = CollapsibleFrame(self.app, self, ipadx=self.app.dpi(10))
         cfPanel.pack(side=RIGHT,fill=Y)
@@ -102,9 +104,29 @@ class MapView(ttk.Frame):
             variable=self.varTriggerLayerVisible,
             command=self.__toggleTriggerLayer)
         self.btnTriggerLayerVisible.grid(
-            column=0, row=7, columnspan=2, sticky=W,
+            column=0, row=9, columnspan=2, sticky=W,
             pady=self.app.dpi((10, 0)))
         Tooltip(self.btnTriggerLayerVisible, TEXT['tooltipTriggerLayer'])
+        self.varCheckerboardLayerVisible = ttk.BooleanVar(value=False)
+        self.btnCheckerboardLayerVisible = ttk.Checkbutton(
+            fPanel, text=TEXT['labelCheckerboardLayer'],
+            bootstyle=(ttk.ROUND, ttk.TOGGLE),
+            variable=self.varCheckerboardLayerVisible,
+            command=self.__toggleCheckerboardLayer)
+        self.btnCheckerboardLayerVisible.grid(
+            column=0, row=7, columnspan=2, sticky=W,
+            pady=self.app.dpi((10, 0)))
+        Tooltip(self.btnCheckerboardLayerVisible, TEXT['tooltipCheckerboardLayer'])
+        self.varUpperTerrainLayerVisible = ttk.BooleanVar(value=False)
+        self.btnUpperTerrainLayerVisible = ttk.Checkbutton(
+            fPanel, text=TEXT['labelUpperTerrainLayer'],
+            bootstyle=(ttk.ROUND, ttk.TOGGLE),
+            variable=self.varUpperTerrainLayerVisible,
+            command=self.__toggleUpperTerrainLayer)
+        self.btnUpperTerrainLayerVisible.grid(
+            column=0, row=8, columnspan=2, sticky=W,
+            pady=self.app.dpi((10, 0)))
+        Tooltip(self.btnUpperTerrainLayerVisible, TEXT['tooltipUpperTerrainLayer'])
 
         fPanel.grid_columnconfigure(0, pad=self.app.dpi(10))
         fPanel.grid_columnconfigure(1, pad=self.app.dpi(10))
@@ -115,10 +137,15 @@ class MapView(ttk.Frame):
 
         # The bottom layer shows terrain
         self.imgDotMapRaw: PIL.Image.Image = None
+        self.imgLayerDotMapRaw: PIL.Image.Image = None
+        self.imgCheckerboardLayer: PIL.Image.Image = None
+        self._upperTerrainLayerVisible = False
+        self._checkerboardLayerVisible = False
 
         # The top layer shows units
         self.imgUnitsDotLayer: PIL.Image.Image = None
         self._unitLayerVersion = 0
+        self._terrainLayerVersion = 0
         self.imgTriggerDotLayer: PIL.Image.Image = None
         self._triggerLayerVisible = False
         self._triggerLayerDirty = True
@@ -127,10 +154,71 @@ class MapView(ttk.Frame):
         self._mapTransformCacheVersion = -1
         self._mapTransformCacheTriggerVersion = -1
         self._mapTransformCacheTriggerVisible = None
+        self._mapTransformCacheCheckerboardVisible = None
+        self._mapTransformCacheUpperTerrainVisible = None
         self._mapTransformCacheImage = None
 
         self.sizeMap: int = None
         self.background = self.app.style.colors.bg
+
+    def setTerrainTool(self, tool: str) -> None:
+        self.zvMapView.drag_enabled = tool == "select"
+
+    def __eventMapViewSetPoint1(self, event) -> None:
+        if (self.app.fTPanel.active_tool == "select"
+            or self.app.nTabsLeft.index('current') != self.app.nTabsLeft.index(self.app.fTPanel)):
+            self.drawSetPoint1(
+                self.__mapViewCoordinateConv(self.zvMapView.coords_conv(event.x, event.y))
+            )
+        elif self.app.fTPanel.active_tool == "pencil":
+            terrain = self.app.fTPanel.getTerrainSelection()
+            if terrain >= 0:
+                x, y = self.__mapViewCoordinateConv(self.zvMapView.coords_conv(event.x, event.y))
+                tile = self.app.mm.get_tile_safe(x,y)
+                if self._upperTerrainLayerVisible:
+                    tile.layer = terrain if terrain != tile.terrain_id else -1
+                else:
+                    tile.terrain_id = terrain
+                self.app.modified = True
+                self.updateTerrainLayerDot(x,y,tile)
+
+    def __eventMapViewSetPoint2(self, event) -> None:
+        if (self.app.fTPanel.active_tool == "select"
+            or self.app.nTabsLeft.index('current') != self.app.nTabsLeft.index(self.app.fTPanel)):
+            self.drawSetPoint2(
+                self.__mapViewCoordinateConv(self.zvMapView.coords_conv(event.x, event.y))
+            )
+
+    def __eventShowTooltipMapView(self, _event) -> None:
+        if (self.app.fTPanel.active_tool == "select"
+            or self.app.nTabsLeft.index('current') != self.app.nTabsLeft.index(self.app.fTPanel)):
+            self.app.statusBarMessage(TEXT['tooltipMapView'], layer='top')
+        elif self.app.fTPanel.active_tool == "pencil":
+            self.app.statusBarMessage(TEXT['tooltipMapViewPencil'], layer='top')
+
+    def __eventMapViewClear(self, _event) -> None:
+        if (self.app.fTPanel.active_tool == "select"
+            or self.app.nTabsLeft.index('current') != self.app.nTabsLeft.index(self.app.fTPanel)):
+            self.drawClear()
+        elif self.app.fTPanel.active_tool == "pencil":
+            self.varUpperTerrainLayerVisible.set(not self._upperTerrainLayerVisible)
+            self.__toggleUpperTerrainLayer()
+
+    def __eventMapViewDrag(self, event) -> None:
+        if (self.app.fTPanel.active_tool == "select"
+            or self.app.nTabsLeft.index('current') != self.app.nTabsLeft.index(self.app.fTPanel)):
+            pass
+        elif self.app.fTPanel.active_tool == "pencil":
+            terrain = self.app.fTPanel.getTerrainSelection()
+            if terrain >= 0:
+                x, y = self.__mapViewCoordinateConv(self.zvMapView.coords_conv(event.x, event.y))
+                tile = self.app.mm.get_tile_safe(x,y)
+                if self._upperTerrainLayerVisible:
+                    tile.layer = terrain if terrain != tile.terrain_id else -1
+                else:
+                    tile.terrain_id = terrain
+                self.app.modified = True
+                self.updateTerrainLayerDot(x,y,tile)
 
     def modifyPoint(self):
         if not self._updatingCoords:
@@ -216,11 +304,10 @@ class MapView(ttk.Frame):
     def loadMapView(self):
         self.__cancelTriggerLayerUpdate()
         self.sizeMap = self.mm.map_width
-        self.imgDotMapRaw = PIL.Image.new('RGB', (self.sizeMap,self.sizeMap))
-        for y in range(0, self.mm.map_height):
-            for x in range(0, self.mm.map_width):
-                tile = self.mm.get_tile(x, y)
-                self.imgDotMapRaw.putpixel((x,y), getTileColor(tile.terrain_id, tile.elevation))
+        if (self.imgCheckerboardLayer is None
+                or self.imgCheckerboardLayer.size != (self.sizeMap, self.sizeMap)):
+            self.imgCheckerboardLayer = self.__buildCheckerboardLayer(self.sizeMap, self.sizeMap)
+        self.loadTerrainLayer()
         self.loadUnitLayer()
         self._triggerLayerDirty = True
         if self._triggerLayerVisible:
@@ -229,6 +316,18 @@ class MapView(ttk.Frame):
             self.imgTriggerDotLayer = None
         self.__redrawMap()
         self.zvMapView.see(*self.__inverseMapViewCoordinateConv((self.sizeMap // 2, self.sizeMap // 2)))
+
+    def loadTerrainLayer(self):
+        self.imgDotMapRaw = PIL.Image.new('RGB', (self.sizeMap,self.sizeMap))
+        self.imgLayerDotMapRaw = PIL.Image.new('RGBA', (self.sizeMap,self.sizeMap))
+        self._terrainLayerVersion += 1
+        for y in range(0, self.mm.map_height):
+            for x in range(0, self.mm.map_width):
+                tile = self.mm.get_tile(x, y)
+                self.imgDotMapRaw.putpixel((x,y), getTileColor(tile.terrain_id, tile.elevation))
+                self.imgLayerDotMapRaw.putpixel((x,y), getTileColor(tile.layer, 1)
+                                                if tile.layer >= 0
+                                                else self.LAYER_MASK_COLOR)
 
     def loadUnitLayer(self):
         self.imgUnitsDotLayer = PIL.Image.new('RGBA', (self.sizeMap * 2 + 1, self.sizeMap * 2 + 1), (0,0,0,0))
@@ -245,6 +344,24 @@ class MapView(ttk.Frame):
                             AOE_PAL[UNIT_NAME[unit.unit_const]['minimap_color']],
                             "RGB"), 255)
                     self.imgUnitsDotLayer.putpixel((x,y), color)
+
+    def updateTerrainLayer(self):
+        def __updateTerrainLayer():
+            del self._terrainLayerUpdate
+            self.drawArea()
+
+        if not hasattr(self, '_terrainLayerUpdate'):
+            self._terrainLayerUpdate = self.after(25, __updateTerrainLayer)
+
+    def updateTerrainLayerDot(self, dot_x: int, dot_y: int, tile: TerrainTile):
+        if not (0 <= dot_x < self.sizeMap and 0 <= dot_y < self.sizeMap):
+            return
+        self._terrainLayerVersion += 1
+        self.imgDotMapRaw.putpixel((dot_x,dot_y), getTileColor(tile.terrain_id, tile.elevation))
+        self.imgLayerDotMapRaw.putpixel((dot_x,dot_y), getTileColor(tile.layer, 1)
+                                        if tile.layer >= 0
+                                        else self.LAYER_MASK_COLOR)
+        self.updateTerrainLayer()
 
     def updateUnitLayer(self):
         def __updateUnitLayer():
@@ -352,6 +469,40 @@ class MapView(ttk.Frame):
         self.imgTriggerDotLayer = self.__buildTriggerLayer()
         self._triggerLayerDirty = False
         self._triggerLayerVersion += 1
+
+    def __toggleCheckerboardLayer(self):
+        self._checkerboardLayerVisible = self.varCheckerboardLayerVisible.get()
+        if self.imgDotMapRaw is not None:
+            self.zvMapView.set_image(self.zvMapView.original_image)
+
+    def __toggleUpperTerrainLayer(self):
+        self._upperTerrainLayerVisible = self.varUpperTerrainLayerVisible.get()
+        if self.imgLayerDotMapRaw is not None:
+            self.zvMapView.set_image(self.zvMapView.original_image)
+
+    def __buildCheckerboardLayer(self, width, height) -> PIL.Image.Image:
+        row_size = (width + 7) // 8
+
+        row0 = (b'\x55' * row_size)[:row_size]
+        row1 = (b'\xAA' * row_size)[:row_size]
+
+        white = bytes(self.CHECKBOARD_COLOR_LIGHT)
+        black = bytes(self.CHECKBOARD_COLOR_DARK)
+
+        row0 = b''.join(
+            white if (x & 1) else black
+            for x in range(width)
+        )
+        row1 = b''.join(
+            black if (x & 1) else white
+            for x in range(width)
+        )
+
+        data = (row0 + row1) * (height // 2)
+        if height & 1:
+            data += row0
+
+        return PIL.Image.frombytes('RGBA', (width, height), data)
 
     def __mapPoint(self, x: int, y: int) -> tuple[int, int] | None:
         if not isinstance(x, int) or not isinstance(y, int):
@@ -462,11 +613,26 @@ class MapView(ttk.Frame):
                     (0, 0), (1, 1))
 
         if (self._mapTransformCacheSource is not image
+                or self._mapTransformCacheTerrainVersion != self._terrainLayerVersion
                 or self._mapTransformCacheVersion != self._unitLayerVersion
                 or self._mapTransformCacheTriggerVersion != self._triggerLayerVersion
-                or self._mapTransformCacheTriggerVisible != self._triggerLayerVisible):
-            scaled_map = image.resize((image.width * self.rhombusViewScale,) * 2,
-                                      resample=Resampling.NEAREST).convert('RGBA')
+                or self._mapTransformCacheTriggerVisible != self._triggerLayerVisible
+                or self._mapTransformCacheCheckerboardVisible != self._checkerboardLayerVisible
+                or self._mapTransformCacheUpperTerrainVisible != self._upperTerrainLayerVisible):
+            if self._upperTerrainLayerVisible:
+                scaled_map = image.convert('RGBA')
+                scaled_map.alpha_composite(self.imgLayerDotMapRaw)
+                scaled_map = scaled_map.resize((image.width * self.rhombusViewScale,) * 2,
+                                               resample=Resampling.NEAREST)
+            else:
+                scaled_map = image.resize((image.width * self.rhombusViewScale,) * 2,
+                                          resample=Resampling.NEAREST).convert('RGBA')
+            if (self._checkerboardLayerVisible
+                    and self.imgCheckerboardLayer is not None):
+                checkerboard_layer = self.imgCheckerboardLayer.resize(
+                    (self.imgCheckerboardLayer.width * self.rhombusViewScale,) * 2,
+                    resample=Resampling.NEAREST)
+                scaled_map.alpha_composite(checkerboard_layer)
             if self._triggerLayerVisible and self.imgTriggerDotLayer is not None:
                 trigger_layer = self.imgTriggerDotLayer.resize(
                     (self.imgTriggerDotLayer.width * (self.rhombusViewScale // 4),) * 2,
@@ -478,8 +644,11 @@ class MapView(ttk.Frame):
             scaled_map.paste(unit_layer, (-self.rhombusViewScale // 4, ) * 2, unit_layer)
             self._mapTransformCacheSource = image
             self._mapTransformCacheVersion = self._unitLayerVersion
+            self._mapTransformCacheTerrainVersion = self._terrainLayerVersion
             self._mapTransformCacheTriggerVersion = self._triggerLayerVersion
             self._mapTransformCacheTriggerVisible = self._triggerLayerVisible
+            self._mapTransformCacheCheckerboardVisible = self._checkerboardLayerVisible
+            self._mapTransformCacheUpperTerrainVisible = self._upperTerrainLayerVisible
             self._mapTransformCacheImage = scaled_map
 
         rotated_width = (image.width * self.rhombusViewScale) * (zoom / 4) * sqrt(2)
@@ -538,6 +707,8 @@ class MapView(ttk.Frame):
             self.zvMapView.set_image(imgDotBase)
             if see:
                 self.zvMapView.see(*self.__inverseMapViewCoordinateConv(((x1 + x2) / 2, (y1 + y2) / 2)))
+        if self.drawAreaUpdateUnitList:
+            self.app.fUEditor.refreshFilteredUnit(self.getArea())
 
     def getArea(self) -> tuple[int, int, int, int]:
         """Return (x1, y1, x2, y2), making sure x1 <= x2, y1 <= y2"""

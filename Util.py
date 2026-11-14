@@ -230,6 +230,8 @@ class ZoomImageViewer(tk.Canvas):
         self.min_zoom = 2.0
         self.max_zoom = 48.0
         self.zoom_factor = self.min_zoom * 2
+        self.drag_enabled: bool = True
+        self.drag_callback: Callable[[Any], None] = None
         self.img_id = None
         self.transform = transform
         self.viewport_transform = viewport_transform
@@ -252,6 +254,9 @@ class ZoomImageViewer(tk.Canvas):
         self.offset_y = 0
         self._last_x = 0
         self._last_y = 0
+
+    def bind_drag(self, func: Callable[[Any], None]):
+        self.drag_callback = func
 
     def __default_transform(self, origin: PIL.Image.Image, zoom: float) -> PIL.Image.Image:
         display_w = int(origin.width * zoom)
@@ -291,10 +296,18 @@ class ZoomImageViewer(tk.Canvas):
                         self.offset_y + self.display_origin[1])
 
     def __on_drag_start(self, event):
+        if self.drag_callback:
+            self.drag_callback(event)
+        if not self.drag_enabled:
+            return
         self._last_x = event.x
         self._last_y = event.y
 
     def __on_drag(self, event):
+        if self.drag_callback:
+            self.drag_callback(event)
+        if not self.drag_enabled:
+            return
         delta_x = event.x - self._last_x
         delta_y = event.y - self._last_y
         self.offset_x += delta_x

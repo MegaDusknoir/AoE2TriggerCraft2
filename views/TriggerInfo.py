@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal
 from tkinter.constants import *
 import ttkbootstrap as ttk
@@ -11,6 +12,8 @@ from Util import EntryU, ReCompiled, Tooltip, ValueSelectButton, ScenarioVersion
 
 if TYPE_CHECKING:
     from main import TCWindow
+
+logger = logging.getLogger(__name__.split('.')[-1])
 
 class TriggerInfoView(ttk.Frame):
     @property
@@ -123,9 +126,10 @@ class TriggerInfoView(ttk.Frame):
             triggerId = self.tl.getNodeId(curItem)[0]
             trigger = self.tm.get_trigger(triggerId)
             newName = self.varTName.get()
-            self.tl.item(curItem, text=' ' + newName)
-            trigger.name = newName
-            self.app.modified = True
+            if trigger.name != newName:
+                self.tl.item(curItem, text=' ' + newName)
+                trigger.name = newName
+                self.app.modified = True
 
     def __setTriggerEnableAndLoop(self):
         curItem = self.tl.focus()

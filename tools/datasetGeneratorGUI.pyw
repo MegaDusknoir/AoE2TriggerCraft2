@@ -133,6 +133,7 @@ class DatasetGeneratorWindow():
                     unitName = gen.getUnitConstInfo(dataObj, langDict)
                     techName = gen.getTechName(dataObj, langDict)
                     tributeName = gen.getTributeName(dataObj, langDict)
+                    terrainName = gen.getTerrainName(dataObj, langDict)
                     if os.path.isdir(destPath) == False:
                         os.makedirs(destPath)
                     with open(f'{destPath}/UnitsName.json', 'w', encoding='utf-8') as f:
@@ -141,6 +142,8 @@ class DatasetGeneratorWindow():
                         json.dump(techName, f, indent=4, ensure_ascii=False)
                     with open(f'{destPath}/TributesName.json', 'w', encoding='utf-8') as f:
                         json.dump(tributeName, f, indent=4, ensure_ascii=False)
+                    with open(f'{destPath}/TerrainsName.json', 'w', encoding='utf-8') as f:
+                        json.dump(terrainName, f, indent=4, ensure_ascii=False)
             messagebox.showinfo(title='Note', message='Generate done.')
 
 if __name__ == '__main__':

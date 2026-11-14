@@ -46,6 +46,7 @@ from TriggerAbstract import *
 from views.TriggerView import TriggerView
 from views.UnitInfo import UnitInfoView
 from views.UnitView import UnitView
+from views.TerrainPanel import TerrainPanel
 from views.MapView import MapView
 from views.MetaView import MetaView
 from views.DisablesView import DisablesView
@@ -459,7 +460,7 @@ class TCWindow():
             format='[%(levelname)s] %(name)s: %(message)s'
         )
         for name in [
-            'DisablesView','UnitView','MappingEditor','MapView','MetaView',
+            'DisablesView','UnitView','MappingEditor','MapView','MetaView','TerrainPanel',
             'TriggerView','TriggerInfo','CeInfo','UnitInfo',
         ]:
             logging.getLogger(name).setLevel(logging.DEBUG)
@@ -624,12 +625,18 @@ class TCWindow():
         self.style.map('sideBarExpand.secondary.TButton',
                        foreground=[('disabled', self.style.colors.secondary), ('active', self.style.colors.bg)],
                        focuscolor=[('disabled', self.style.colors.bg), ('active', self.style.colors.secondary)])
+        self.style.configure('Link.TButton') # base style
         self.style.configure('iconButton.Link.TButton', shiftrelief=1, padding=(2,2,1,1))
         self.style.configure('selectionButton.Link.TButton', shiftrelief=1, padding=(2,2,1,1), width=5, background=self.style.colors.active)
+        self.style.configure('Outline.TButton') # base style
         self.style.configure('ceWidgetButton.Outline.TButton',)
         self.style.configure('ceWindowWidgetButton.success.Outline.TButton',)
+        self.style.configure('TCheckbutton') # base style
         self.style.configure('cbWithDescription.TCheckbutton', font=(defaultFont.cget('family'), 8))
-
+        self.style.configure('Toolbutton') # base style
+        self.style.configure('toolbarButton.Toolbutton', padding=0, anchor='center',
+                             background=self.style.colors.bg,
+                             relief='flat')
         self.main = ttk.Frame(self.root, padding=self.dpi((10,10,10,5)))
         self.__createStatusBar()
         self.__createPanedWindow()
@@ -670,6 +677,9 @@ class TCWindow():
         self.imgCeSetArea = self.__loadImage(f'{workDir}/images/btnCeSetArea.png', self.dpi((20, 20)))
 
         self.imgBtnAdd = self.__loadImage(f'{workDir}/images/btnAdd.png', self.dpi((20, 20)))
+        
+        self.imgToolSelect = self.__loadImage(f'{workDir}/images/toolSelect.png', self.dpi((20, 20)))
+        self.imgToolPencil = self.__loadImage(f'{workDir}/images/toolPencil.png', self.dpi((20, 20)))
         # load later for start boost
         self.imgAbout = None
 
@@ -692,8 +702,11 @@ class TCWindow():
         self.fTEditor.pack(fill=BOTH, expand=True, padx=(0, self.dpi(5)))
         self.fUEditor = UnitView(self, self.nTabsLeft)
         self.fUEditor.pack(fill=BOTH, expand=True, padx=(0, self.dpi(5)))
+        self.fTPanel = TerrainPanel(self, self.nTabsLeft)
+        self.fTPanel.pack(fill=BOTH, expand=True, padx=(0, self.dpi(5)))
         self.nTabsLeft.add(self.fTEditor, text=TEXT['tabTriggerEditor'])
         self.nTabsLeft.add(self.fUEditor, text=TEXT['tabUnitEditor'])
+        self.nTabsLeft.add(self.fTPanel, text=TEXT['tabTerrainPanel'])
         self.nTabsLeft.pack(fill=BOTH, expand=True, padx=(0, self.dpi(5)))
 
     def __createPanedWindowRight(self):

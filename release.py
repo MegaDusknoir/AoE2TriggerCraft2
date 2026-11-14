@@ -106,7 +106,7 @@ if __name__ == '__main__':
             if os.path.isdir(f'{workDir}/{dir}'):
                 for file in os.listdir(f'{workDir}/{dir}'):
                     if f'{dir}/{file}' in tracked \
-                    or file in ['UnitsName.json', 'TechsName.json', 'TributesName.json']:
+                    or file in ['UnitsName.json', 'TechsName.json', 'TributesName.json', 'TerrainsName.json']:
                         zf.write(f'{workDir}/{dir}/{file}', f'{dir}/{file}')
                         print(f'Write "{workDir}/{dir}/{file}" to "{dir}/{file}"')
         zf.write(f"{workDir}/release/Trigger Craft.exe", "Trigger Craft.exe")

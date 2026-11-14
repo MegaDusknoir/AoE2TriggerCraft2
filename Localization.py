@@ -32,14 +32,26 @@ class LanguageDict(dict[str, str]):
         'descPreferences'
     ]
 
+class UnitDataDict(LanguageDict):
+    def __missing__(self, key) -> str:
+        return {
+            "name": "Unknown",
+            "minimap_mode": 0,
+            "minimap_color": 0,
+            "hide_in_editor": 1,
+            "type": 10,
+            "hero_mode": 0
+        }
+
 TEXT = LanguageDict()
 
 CONDITION_NAME = LanguageDict()
 EFFECT_NAME = LanguageDict()
 
 TECH_NAME = LanguageDict()
-UNIT_NAME = LanguageDict()
+UNIT_NAME = UnitDataDict()
 RESOURCE_NAME = LanguageDict()
+TERRAIN_NAME = LanguageDict()
 
 LOCALIZATION_DEFINES: list[dict[str,str]] = []
 
@@ -111,6 +123,9 @@ def loadLocalizedText(workDir: str, lang: str='auto') -> None:
     with OpenResourcesFile(f'{localizationPath}/TributesName.json', encoding='utf-8') as fp:
         if fp:
             RESOURCE_NAME.update(json.load(fp, object_hook=keys_to_int))
+    with OpenResourcesFile(f'{localizationPath}/TerrainsName.json', encoding='utf-8') as fp:
+        if fp:
+            TERRAIN_NAME.update(json.load(fp, object_hook=keys_to_int))
 
 def getConditionName(conditionType: int) -> str:
     """Get the localized name of a condition type."""

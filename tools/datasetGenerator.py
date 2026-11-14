@@ -82,6 +82,13 @@ def getTributeName(data: DatFile, langStrings: dict[int, str]):
     tributesName = {i:langStrings.get(i + 15000, f'<Tribute{i}>') for i in range(0, 500)}
     return tributesName
 
+def getTerrainName(data: DatFile, langStrings: dict[int, str]):
+    terrainsName = {}
+    for i, terrain in enumerate(data.terrain_block.terrains):
+        string_id = terrain.string_id
+        terrainsName[i] = langStrings.get(string_id, f'<Terrain{i}>')
+    return terrainsName
+
 def parseDataFile(path):
     data = DatFile.parse(path)
     return data
@@ -113,3 +120,7 @@ if __name__ == '__main__':
     tributesName = getTributeName(data, language_data)
     with open(f'{workDir}/TributesName.json', 'w', encoding='utf-8') as f:
         json.dump(tributesName, f, indent=4, ensure_ascii=False)
+
+    terrainsName = getTerrainName(data, language_data)
+    with open(f'{workDir}/TerrainsName.json', 'w', encoding='utf-8') as f:
+        json.dump(terrainsName, f, indent=4, ensure_ascii=False)

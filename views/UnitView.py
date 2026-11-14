@@ -108,7 +108,11 @@ class UnitView(ttk.Frame):
         self.cbUPlayerFilter.set_display_event(self.__modifyUnitFilter)
         self.cbUPlayerFilter.bind("<<ComboboxSelected>>", lambda e: self.cbUPlayerFilter.selection_clear())
         self.cbUAreaFilter = ttk.Combobox(self.fUListPanel,
-                                    values=[TEXT['comboValueFullMap'], TEXT['comboValueSelectedArea']],
+                                    values=[
+                                        TEXT['comboValueFullMap'],
+                                        TEXT['comboValueSelectedArea'],
+                                        TEXT['comboValueSelectedAreaRealTime'],
+                                    ],
                                     state="readonly", width=14)
         self.cbUAreaFilter.pack(side=LEFT, anchor=W, padx=self.app.dpi((10, 0)), pady=self.app.dpi((10, 10)))
         self.cbUAreaFilter.bind("<<ComboboxSelected>>", lambda e: (self.cbUAreaFilter.selection_clear(), self.__modifyUnitFilter()))
@@ -157,14 +161,8 @@ class UnitView(ttk.Frame):
             self.app.fUnitInfo.unitSelected(key.getUnit(self.um))
             self.app.nTabsRightBottom.select(self.app.fUnitInfo)
 
-    def __modifyUnitFilter(self, *args):
+    def refreshFilteredUnit(self, areaFilter: tuple[int, int, int, int]):
         playerFilter = self.varUPlayerFilter.get()
-        areaFilter = True if self.cbUAreaFilter.current() == 1 else False
-        if areaFilter:
-            x1, y1, x2, y2 = self.app.fMapViewTab.getArea()
-            x2 += 1
-            y2 += 1
-        
         for item in self.tvUnitList.get_children():
             self.tvUnitList.delete(item)
         if playerFilter >= 0:
@@ -173,6 +171,10 @@ class UnitView(ttk.Frame):
             playerList = [p for p in range(0, self.pm.active_players + 1)]
         else:
             return
+        areaFilter = self.app.fMapViewTab.getArea()
+        x1, y1, x2, y2 = areaFilter
+        x2 += 1
+        y2 += 1
         for player in playerList:
             for listId, unit in enumerate(self.um.units[player]):
                 if areaFilter:
@@ -180,6 +182,13 @@ class UnitView(ttk.Frame):
                         self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const, player, listId)
                 else:
                     self.tvUnitList.insert('', END, unit.reference_id, unit.unit_const, player, listId)
+        
+    def __modifyUnitFilter(self, *args):
+        areaFilter = self.app.fMapViewTab.getArea() \
+                if self.cbUAreaFilter.current() in [1,2] \
+                else []
+        self.app.fMapViewTab.drawAreaUpdateUnitList = True if self.cbUAreaFilter.current() == 2 else False
+        self.refreshFilteredUnit(areaFilter)
 
     def unitIdFilter(self, refIds: list[int]):
         if refIds == []:

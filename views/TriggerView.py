@@ -275,11 +275,21 @@ class TriggerView(ttk.Frame):
             self.tvTriggerList.pack(side=RIGHT, fill=BOTH, expand=YES)
 
         def createTriggerListFilter():
+            def _setFilterArea():
+                self.varTriggerFilter.set(
+                    f'/{getAreaAbstract(*self.app.fMapViewTab.getArea())}'
+                )
             self.varTriggerFilter = ttk.StringVar()
-            eFilter = EntryU(self, textvariable=self.varTriggerFilter)
-            eFilter.pack(fill=X, padx=self.app.dpi((10, 5)), pady=self.app.dpi((0, 5)))
+            fFilter = ttk.Frame(self)
+            fFilter.pack(fill=X, padx=self.app.dpi((10, 5)), pady=self.app.dpi((0, 5)))
+            eFilter = EntryU(fFilter, textvariable=self.varTriggerFilter)
             self.varTriggerFilter.trace_add('write', lambda *arg: self.__triggerFilter(self.varTriggerFilter.get(), self.tl.focus()))
             eFilter.bind('<Return>', lambda *arg: self.__triggerFilter(self.varTriggerFilter.get(), self.tl.focus()))
+            btnSetArea = ttk.Button(fFilter, style='iconButton.Link.TButton', image=self.app.imgCeSetArea,
+                                        command=_setFilterArea)
+            Tooltip(btnSetArea, TEXT['tooltipFilterSetArea'])
+            btnSetArea.pack(side=RIGHT, padx=0)
+            eFilter.pack(side=LEFT, fill=X, expand=True)
 
         self.varTSelectFront: ttk.StringVar
         self.varTSelectBack: ttk.StringVar
