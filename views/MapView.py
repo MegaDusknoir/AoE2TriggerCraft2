@@ -161,6 +161,10 @@ class MapView(ttk.Frame):
         self.sizeMap: int = None
         self.background = self.app.style.colors.bg
 
+    def updateDarkMode(self):
+        self.background = self.app.style.colors.bg
+        self.zvMapView.set_image(self.zvMapView.original_image)
+
     def setTerrainTool(self, tool: str) -> None:
         self.zvMapView.drag_enabled = tool == "select"
 
@@ -175,12 +179,13 @@ class MapView(ttk.Frame):
             if terrain >= 0:
                 x, y = self.__mapViewCoordinateConv(self.zvMapView.coords_conv(event.x, event.y))
                 tile = self.app.mm.get_tile_safe(x,y)
-                if self._upperTerrainLayerVisible:
-                    tile.layer = terrain if terrain != tile.terrain_id else -1
-                else:
-                    tile.terrain_id = terrain
-                self.app.modified = True
-                self.updateTerrainLayerDot(x,y,tile)
+                if tile:
+                    if self._upperTerrainLayerVisible:
+                        tile.layer = terrain if terrain != tile.terrain_id else -1
+                    else:
+                        tile.terrain_id = terrain
+                    self.app.modified = True
+                    self.updateTerrainLayerDot(x,y,tile)
 
     def __eventMapViewSetPoint2(self, event) -> None:
         if (self.app.fTPanel.active_tool == "select"
@@ -213,12 +218,13 @@ class MapView(ttk.Frame):
             if terrain >= 0:
                 x, y = self.__mapViewCoordinateConv(self.zvMapView.coords_conv(event.x, event.y))
                 tile = self.app.mm.get_tile_safe(x,y)
-                if self._upperTerrainLayerVisible:
-                    tile.layer = terrain if terrain != tile.terrain_id else -1
-                else:
-                    tile.terrain_id = terrain
-                self.app.modified = True
-                self.updateTerrainLayerDot(x,y,tile)
+                if tile:
+                    if self._upperTerrainLayerVisible:
+                        tile.layer = terrain if terrain != tile.terrain_id else -1
+                    else:
+                        tile.terrain_id = terrain
+                    self.app.modified = True
+                    self.updateTerrainLayerDot(x,y,tile)
 
     def modifyPoint(self):
         if not self._updatingCoords:

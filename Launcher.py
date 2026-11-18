@@ -14,12 +14,15 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('file', type=str, help='Open scenario file', nargs='?', default='')
-    parser.add_argument('--dark', help='Darkly mode', nargs='?', default=False)
+    parser.add_argument('--dark', help='Dark mode', nargs='?', default=False)
+    parser.add_argument('--light', help='Light mode', nargs='?', default=False)
     args = parser.parse_args()
     if args.dark != False:
-        theme = 'darkly'
+        theme = 'dark'
+    elif args.light != False:
+        theme = 'light'
     else:
-        theme = 'litera'
+        theme = 'auto'
     path = args.file
 
     while True:

@@ -18,6 +18,7 @@ import tkinter.font as tkfont
 from tkinter.constants import *
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from tkinter import messagebox
+from tkinter import TclError
 from tkinter.ttk import Widget
 import ttkbootstrap as ttk
 from ttkbootstrap.scrolled import ScrolledText
@@ -53,7 +54,8 @@ from views.DisablesView import DisablesView
 from views.TriggerInfo import TriggerInfoView
 from views.CeInfo import CeInfoView
 from views.MappingEditor import MappingEditor
-from Util import DebugTimeCount, EntryU, ScenarioVersion
+from Util import ThemedMessageBox, DebugTimeCount, EntryU, ScenarioVersion, ScrollableFrame, set_dark_title_bar
+from DarkMenu import DarkMenu as Menu
 from VirtualEffects import (
     decode_trigger_metadata_description,
     encode_trigger_metadata_description,
@@ -399,9 +401,10 @@ logger = logging.getLogger(__name__.split('.')[-1])
 
 class TCWindow():
 
-    def __init__(self, scen='', theme='darkly') -> None:
+    def __init__(self, scen='', theme=Literal['dark','light','auto']) -> None:
         start_init = time.time()
 
+        # DPI
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
         self.scaleFactor=ctypes.windll.shcore.GetScaleFactorForDevice(0)
 
@@ -413,19 +416,26 @@ class TCWindow():
         self.stdoutBack = sys.stdout
         sys.stdout = self.ioAgent
 
-        self.root = ttk.Window('', iconphoto=None)
+        # Early load options
         self.options = GlobalOptions(workDir)
         self.scenOptions = ScenarioOptions()
+
         try:
-            loadLocalizedText(workDir, self.options.language.get())
+            loadLocalizedText(workDir, self.options.earlyGet('language'))
         except ResourcesFileError as e:
             messagebox.showerror('File Error', 'The application can not startup due to:\n\n{0}'.format(e.args[0]), icon='error')
             sys.exit()
 
-        self.root.title(TEXT['titleMainWindow'])
-        self.root.geometry(f'{self.dpi(1280)}x{self.dpi(720)}')
+        if theme == 'auto':
+            self.dark = True if self.options.earlyGet('darkMode') else False
+        else:
+            self.dark = True if theme == 'dark' else False
+        self.theme = 'darkly' if self.dark else 'litera'
+
+        self.root = ttk.Window(TEXT['titleMainWindow'], self.theme, iconphoto=None)
+        self.options.construct()
+        self.root.geometry(f'{self.dpi(1280)}x{self.dpi(800)}')
         self.root.protocol('WM_DELETE_WINDOW', self.windowClose)
-        self.theme = theme
         if scen != '':
             self.initialOpen = os.path.normpath(scen)
         else:
@@ -443,15 +453,27 @@ class TCWindow():
 
         self.style = ttk.Style()
         self.style.theme_use(self.theme)
-        if self.theme in ('darkly'):
-            self.tvLineColoring = self.style.colors.inputbg
-        else:
-            self.tvLineColoring = self.style.colors.active
 
         self.__loadImages()
 
+        ThemedMessageBox.dark = self.dark
+        ThemedMessageBox.scale = self.scaleFactor / 100
+        ThemedMessageBox.localization = {
+            "ok": TEXT['btnOK'],
+            "cancel": TEXT['btnCancel'],
+            "yes": TEXT['btnYes'],
+            "no": TEXT['btnNo'],
+        }
+
         self.wndLog = None
+        self.root.grid_rowconfigure(2, weight=1)
+        ttk.Separator(self.root, orient=HORIZONTAL).grid(row=1,column=0,sticky='ew',pady=self.dpi((0,2)))
+        self.root.grid_columnconfigure(0, weight=1)
+        self._configureStyles()
         self.__createMainWindow()
+        if self.dark:
+            self.root.withdraw()
+            self.setDarkMode(self.root)
 
         end_init = time.time()
         logging.basicConfig(
@@ -465,6 +487,64 @@ class TCWindow():
         ]:
             logging.getLogger(name).setLevel(logging.DEBUG)
         logger.info(TEXT['logInitialiTime'].format(end_init - start_init))
+
+    def setDarkMode(self, window: ttk.Window, enabled=None):
+        try:
+            set_dark_title_bar(window, self.dark)
+        except (NotImplementedError, OSError, TclError) as e:
+            logger.warning("Unable to update the window title bar appearance: %s", e)
+
+    def _useTheme(self, theme):
+        originalElementCreate = self.style.element_create
+        originalLayout = self.style.layout
+        elementNames = {}
+
+        def createElement(name, *args, **kwargs):
+            if name in elementNames:
+                return None
+            try:
+                return originalElementCreate(name, *args, **kwargs)
+            except TclError as e:
+                if 'Duplicate element' not in str(e):
+                    raise
+                if name.endswith('TScrollbar.thumb'):
+                    elementNames[name] = name
+                    return
+                if args and args[0] == 'from':
+                    elementNames[name] = name
+                    return
+                uniqueName = f'{name}__{theme}'
+                originalElementCreate(uniqueName, *args, **kwargs)
+                elementNames[name] = uniqueName
+
+        def replaceElementNames(value):
+            if isinstance(value, str):
+                return elementNames.get(value, value)
+            if isinstance(value, list):
+                return [replaceElementNames(item) for item in value]
+            if isinstance(value, tuple):
+                return tuple(replaceElementNames(item) for item in value)
+            if isinstance(value, dict):
+                return {
+                    elementNames.get(key, key): replaceElementNames(item)
+                    for key, item in value.items()
+                }
+            return value
+
+        def configureLayout(styleName, layout=None):
+            if layout is None:
+                return originalLayout(styleName)
+            return originalLayout(styleName, replaceElementNames(layout))
+
+        # ttkbootstrap 1.14 can inherit Tcl elements with the same names
+        # across themes; give overridden elements a theme-local name.
+        self.style.element_create = createElement
+        self.style.layout = configureLayout
+        try:
+            self.style.theme_use(theme)
+        finally:
+            del self.style.element_create
+            del self.style.layout
 
     def windowClose(self):
         operationCancel = True
@@ -485,6 +565,8 @@ class TCWindow():
             self.root.iconbitmap(default=iconPath)
 
         # Show window before take time to load a scenario
+        self.centerWindowGeometry(self.root, self.root.winfo_width(), self.root.winfo_height(), 0.4)
+        self.root.deiconify()
         self.root.update()
         if self.initialOpen == '':
             self.generateDefaultScenario()
@@ -612,7 +694,18 @@ class TCWindow():
     # region Creation
 
     def __createMainWindow(self):
+        self.main = ttk.Frame(self.root, padding=self.dpi((10,5,10,5)))
+        self.__createStatusBar()
+        self.__createPanedWindow()
+        self.__createMenu()
+        self.__bindGlobalKeys()
+
+        self.main.grid(row=2,column=0,sticky='nsew')
+
+    def _configureStyles(self):
         # tkfont.nametofont('TkDefaultFont').config(family='Segoe UI')
+        selectionButtonColor = self.style.colors.secondary if self.dark else self.style.colors.active
+        outlineColor = self.style.colors.info if self.dark else self.style.colors.primary
         defaultFont = tkfont.nametofont('TkDefaultFont')
         self.style.configure('ceTypes.TCombobox', postoffset=self.dpi((0, 0, 80, 0)))
         self.style.configure('Borderless.Treeview', borderwidth=0,
@@ -627,9 +720,14 @@ class TCWindow():
                        focuscolor=[('disabled', self.style.colors.bg), ('active', self.style.colors.secondary)])
         self.style.configure('Link.TButton') # base style
         self.style.configure('iconButton.Link.TButton', shiftrelief=1, padding=(2,2,1,1))
-        self.style.configure('selectionButton.Link.TButton', shiftrelief=1, padding=(2,2,1,1), width=5, background=self.style.colors.active)
-        self.style.configure('Outline.TButton') # base style
-        self.style.configure('ceWidgetButton.Outline.TButton',)
+        self.style.configure('selectionButton.Link.TButton', shiftrelief=1,
+                             padding=(1,1,0,0), width=5, borderwidth=1,
+                             background=selectionButtonColor,
+                             relief='flat')
+        self.style.configure('Outline.TButton',
+                             foreground=outlineColor,
+                             bordercolor=outlineColor) # base style
+        self.style.configure('ceWidgetButton.Outline.TButton')
         self.style.configure('ceWindowWidgetButton.success.Outline.TButton',)
         self.style.configure('TCheckbutton') # base style
         self.style.configure('cbWithDescription.TCheckbutton', font=(defaultFont.cget('family'), 8))
@@ -637,13 +735,6 @@ class TCWindow():
         self.style.configure('toolbarButton.Toolbutton', padding=0, anchor='center',
                              background=self.style.colors.bg,
                              relief='flat')
-        self.main = ttk.Frame(self.root, padding=self.dpi((10,10,10,5)))
-        self.__createStatusBar()
-        self.__createPanedWindow()
-        self.__createMenu()
-        self.__bindGlobalKeys()
-
-        self.main.pack(fill=BOTH, expand=YES)
 
     def __loadImage(self, path, resize:tuple[int, int]) -> PIL.ImageTk.PhotoImage:
         try:
@@ -743,8 +834,8 @@ class TCWindow():
         self.nTabsRightBottom.pack(fill=BOTH, expand=True, padx=0, pady=self.dpi((5, 0)))
 
     def __createMenu(self):
-        self.menuRoot = ttk.Menu(self.root)
-        self.menuFile = ttk.Menu(self.menuRoot, tearoff=0)
+        self.menuRoot = Menu(self.root, scale=lambda v: max(1, round(self.scaleFactor / 150 * v)))
+        self.menuFile = Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuFile'], menu=self.menuFile)
         self.menuFile.add_command(label=TEXT['menuNew'], command=self.cmdNewScenario)
         self.menuFile.add_command(label=TEXT['menuOpen'], accelerator='Ctrl+O', command=self.cmdOpenScenarioFile)
@@ -758,7 +849,7 @@ class TCWindow():
         self.menuFile.add_separator()
         self.menuFile.add_command(label=TEXT['menuExit'], command=self.windowClose)
 
-        self.menuEdit = ttk.Menu(self.menuRoot, tearoff=0)
+        self.menuEdit = Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuEdit'], menu=self.menuEdit)
         self.menuEdit.add_command(label=TEXT['menuExportAllTriggerToText'], command=self.exportTriggerToText)
         self.menuEdit.add_command(label=TEXT['menuImportAllTriggerFromText'], command=self.importTriggerFromText)
@@ -775,19 +866,38 @@ class TCWindow():
         self.menuEdit.add_separator()
         self.menuEdit.add_command(label=TEXT['menuPreferences'], command=self.__modifyPreferences)
 
-        self.menuLanguage = ttk.Menu(self.menuRoot, tearoff=0)
+        self.menuLanguage = Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuLanguage'], menu=self.menuLanguage)
         for language in LOCALIZATION_DEFINES:
             self.menuLanguage.add_command(label=language['name'], command=lambda code=language['code']: self.changeLanguage(code))
 
-        self.menuAbout = ttk.Menu(self.menuRoot, tearoff=0)
+        self.menuAbout = Menu(self.menuRoot, tearoff=0)
         self.menuRoot.add_cascade(label=TEXT['menuHelp'], menu=self.menuAbout)
         self.menuAbout.add_command(label=TEXT['menuLogs'], command=self.__showLogs)
         self.menuAbout.add_separator()
         self.menuAbout.add_command(label=TEXT['menuHomePage'], command=self.__accessHomepage)
         self.menuAbout.add_command(label=TEXT['menuAbout'], command=self.__showAbout)
 
-        self.root.config(menu=self.menuRoot)
+        self.menuRoot.grid(row=0,column=0, sticky='sw')
+
+    def changeTheme(self, dark: bool):
+        theme = 'darkly' if dark else 'litera'
+        self._useTheme(theme)
+        self.dark = dark
+        self.theme = theme
+        ThemedMessageBox.dark = self.dark
+        self.menuRoot.refresh_theme()
+        self._configureStyles()
+        self.fMapViewTab.updateDarkMode()
+        self.setDarkMode(self.root)
+
+        pending = [self.root]
+        while pending:
+            parent = pending.pop()
+            for child in parent.winfo_children():
+                if isinstance(child, ttk.Toplevel):
+                    self.setDarkMode(child)
+                pending.append(child)
 
     def __modifyPreferences(self):
         def on_confirm():
@@ -805,9 +915,11 @@ class TCWindow():
         wndPref.withdraw()
         wndPref.grab_set()
         wndPref.protocol("WM_DELETE_WINDOW", lambda: _close_dialog(wndPref))
+        self.centerWindowGeometry(wndPref, self.dpi(400), self.dpi(600), 0.4)
 
-        fSettings = ttk.Frame(wndPref)
-        self.varPreferences = {}
+        fSettingsSFrame = ScrollableFrame(wndPref)
+        fSettings = fSettingsSFrame.content
+        self.varPreferences: dict[str, ttk.Variable] = {}
         for option, args in OPTIONS_DEFINE.items():
             if args['showInPreferences']:
                 VType = type(getattr(self.options, option))
@@ -821,9 +933,17 @@ class TCWindow():
                         wOption = EntryU(fOption, textvariable=self.varPreferences[option])
                         wOption.pack(side=TOP, anchor=W)
                     case 'boolean':
-                        wOption = ttk.Checkbutton(fOption, text=TEXT['descPreferences'][option], variable=self.varPreferences[option],
+                        fBoolean = ttk.Frame(fOption)
+                        wOption = ttk.Checkbutton(fBoolean, variable=self.varPreferences[option],
                                                   style='cbWithDescription.TCheckbutton')
-                        wOption.pack(side=TOP, anchor=W)
+                        lDescription = ttk.Label(fBoolean, text=TEXT['descPreferences'][option],
+                                                 font=(tkfont.nametofont('TkDefaultFont').cget('family'), 8))
+                        lDescription.bind(
+                            "<ButtonRelease-1>", lambda *_, b=wOption: b.invoke(), add="+"
+                        )
+                        wOption.pack(side=LEFT, anchor=N, pady=self.dpi(2))
+                        lDescription.pack(side=RIGHT, anchor=N)
+                        fBoolean.pack(side=TOP, anchor=W)
                     case _:
                         continue
                 lOption = ttk.Label(fSettings, text=TEXT['namePreferences'][option])
@@ -831,7 +951,12 @@ class TCWindow():
                              pady=self.dpi((0,4)))
                 fOption.grid(column=args['grid'][0], row=args['grid'][1]*2+1, columnspan=args['columnSpan'], sticky=W,
                              padx=self.dpi((10,0)), pady=self.dpi((0,14)))
-        fSettings.pack(padx=self.dpi(10), pady=self.dpi(10), fill=X)
+        self.varPreferences['darkMode'].trace_add(
+            'write', lambda *_:
+                self.changeTheme(self.varPreferences['darkMode'].get())
+        )
+        fSettingsSFrame.pack(padx=self.dpi(10), pady=self.dpi((6,0)), fill=BOTH, expand=True)
+        ttk.Separator(wndPref, orient=HORIZONTAL).pack(padx=self.dpi(10), pady=self.dpi((4,12)), fill=X)
 
         fConfirmCancel = ttk.Frame(wndPref)
         ttk.Button(fConfirmCancel, text=TEXT['btnSave'], command=on_confirm) \
@@ -840,11 +965,10 @@ class TCWindow():
             .pack(side=LEFT, fill=X, expand=YES, padx=self.dpi(40))
         fConfirmCancel.pack(side=BOTTOM, fill=X, pady=self.dpi((0,10)))
 
-        wndPref.update_idletasks()
-        self.centerWindowGeometry(wndPref, wndPref.winfo_width(), wndPref.winfo_height(), 0.4)
         wndPref.resizable(False, False)
         wndPref.deiconify()
         wndPref.transient(self.main)
+        self.setDarkMode(wndPref)
 
     def __createStatusBar(self):
         self.fStatusBar = ttk.Frame(self.main)
@@ -878,6 +1002,7 @@ class TCWindow():
     def reinitialize(self):
         """Reinitialize the main frame to apply language changes"""
         self.main.destroy()
+        self.menuRoot.destroy()
         self.__createMainWindow()
 
         self.updateWindowTitle()
@@ -892,6 +1017,12 @@ class TCWindow():
         except ResourcesFileError as e:
             messagebox.showerror('File Error', 'Fail to change language due to:\n\n{0}'.format(e.args[0]), icon='error')
         else:
+            ThemedMessageBox.localization = {
+                "ok": TEXT['btnOK'],
+                "cancel": TEXT['btnCancel'],
+                "yes": TEXT['btnYes'],
+                "no": TEXT['btnNo'],
+            }
             self.reinitialize()
 
     def statusBarMessage(self, msg: str, update=False, layer: Literal['bottom', 'top'] = 'bottom') -> None:
@@ -928,6 +1059,7 @@ class TCWindow():
         else:
             self.wndLog = ttk.Toplevel(TEXT['titleLogs'], master=self.main)
             self.wndLog.geometry(f'{self.dpi(1200)}x{self.dpi(800)}')
+            self.setDarkMode(self.wndLog)
             self.__createLogWindow()
             self.wndLog.focus_set()
 
@@ -942,6 +1074,7 @@ class TCWindow():
         self.wndAbout = ttk.Toplevel(TEXT['titleAbout'], master=self.main, transient=self.main)
         self.centerWindowGeometry(self.wndAbout, self.dpi(460), self.dpi(140), location=0.3)
         self.wndAbout.resizable(False, False)
+        self.setDarkMode(self.wndAbout)
         lblAboutImage = ttk.Label(self.wndAbout, image=self.imgAbout)
         lblAboutImage.pack(side=LEFT, padx=self.dpi((10, 0)))
         lblAboutTitle = ttk.Label(self.wndAbout, text=TEXT['textAboutTitle'],
@@ -984,19 +1117,19 @@ class TCWindow():
             try:
                 triggersDump = json.load(f)
             except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
             except Exception as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
                 raise e
         if triggersDump:
             try:
                 TriggerJsonIO.restore(self.tm, triggersDump)
             except TriggerJsonIO.TriggerJsonInvalidError:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
             except TriggerJsonIO.TriggerJsonNotRestorableError:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonNotRestorableError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonNotRestorableError'])
             except Exception as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
                 raise e
             else:
                 self.modified = True
@@ -1007,7 +1140,7 @@ class TCWindow():
     def exportSelTriggerToText(self):
         valueRange = self.fTEditor.getRangeValue()
         if type(valueRange) == str:
-            messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageValueRangeInvalid'].format(valueRange))
+            ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageValueRangeInvalid'].format(valueRange))
             return
         displayIdBegin, displayIdEnd, displayIdTarget = valueRange
 
@@ -1035,17 +1168,17 @@ class TCWindow():
             try:
                 triggersDump = json.load(f)
             except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
             except Exception as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
                 raise e
         if triggersDump:
             try:
                 TriggerJsonIO.append(self.tm, triggersDump)
             except TriggerJsonIO.TriggerJsonInvalidError:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
             except Exception as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
                 raise e
             else:
                 self.modified = True
@@ -1074,7 +1207,7 @@ class TCWindow():
             with open(saveFilePath, 'w', encoding='utf-8') as fp:
                 json.dump(tDump, fp, indent=4, ensure_ascii=False)
         except Exception as e:
-            messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+            ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
         else:
             logger.info(TEXT['logTextJsonSaved'])
             self.statusBarMessage(TEXT['noticeTextJsonSaved'])
@@ -1189,17 +1322,17 @@ class TCWindow():
             try:
                 textDump = json.load(f)
             except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
             except Exception as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
         if textDump:
             try:
                 jsonschema.validate(textDump, schema)
             except jsonschema.ValidationError as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
             else:
                 if not TriggerJsonIO.textPreimportCheck(self.tm, textDump['triggers']):
-                    messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageTextJsonNotMatchError'])
+                    ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageTextJsonNotMatchError'])
                     return
                 for k, v in textDump['messages'].items():
                     setattr(self.activeScenario.message_manager, k, v)
@@ -1212,7 +1345,7 @@ class TCWindow():
                 self.statusBarMessage(TEXT['noticeTextJsonImported'])
 
     def textMojibakeDecode(self, sourceEncoding):
-        if not messagebox.askokcancel(title=TEXT['messageTitleWarning'],
+        if not ThemedMessageBox.askokcancel(title=TEXT['messageTitleWarning'],
                                message=TEXT['messageWarningTextMojibakeDecode'],
                                icon='warning',
                                default='cancel'):
@@ -1239,7 +1372,7 @@ class TCWindow():
                             if t:
                                 setattr(effect, attr, decode_mojibake(t, sourceEncoding))
         except UnicodeEncodeError:
-            messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageTextMojibakeDecodeError'])
+            ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageTextMojibakeDecodeError'])
         else:
             self.fTEditor.loadTrigger()
             self.fMetaViewTab.loadMeta()
@@ -1254,11 +1387,11 @@ class TCWindow():
             try:
                 self.scenOptions.mappings.loadf(openFilePath)
             except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonDecodeError'])
             except jsonschema.ValidationError as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageJsonSchemaError'])
             except Exception as e:
-                messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
             else:
                 self.modified = True
                 self.fMappingEditor.loadConfig()
@@ -1277,7 +1410,7 @@ class TCWindow():
         try:
             self.scenOptions.mappings.save(saveFilePath)
         except Exception as e:
-            messagebox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
+            ThemedMessageBox.showerror(title=TEXT['titleError'], message=TEXT['messageError'].format(e))
         else:
             logger.info(TEXT['logSavedDuplicateMappings'])
             self.statusBarMessage(TEXT['noticeDuplicateMappingsSaved'])
@@ -1342,7 +1475,7 @@ class TCWindow():
 
     def askSaveScenario(self) -> bool:
         """Return True if operation continue, False if break"""
-        replySave =  messagebox.askyesnocancel(title=TEXT['titleAskSaveScenario'],
+        replySave =  ThemedMessageBox.askyesnocancel(title=TEXT['titleAskSaveScenario'],
                                                message=TEXT['messageAskSaveScenario'],
                                                icon='question',
                                                default='cancel')
@@ -1362,7 +1495,7 @@ class TCWindow():
             if self.options.defaultToSavingMetadata.get():
                 createContainer = True
             else:
-                createContainer = messagebox.askyesnocancel(
+                createContainer = ThemedMessageBox.askyesnocancel(
                     title=TEXT['titleScenarioMetadata'],
                     message=TEXT['messageScenarioMetadataMissing'],
                     icon='question',
@@ -1385,13 +1518,13 @@ class TCWindow():
             self.activeScenario.write_to_file(path)
         except OverflowError as e:
             if isinstance(e.args[0], str) and e.args[0] == 'int too big to convert':
-                messagebox.showerror(title=TEXT['titleSavefailed'],
+                ThemedMessageBox.showerror(title=TEXT['titleSavefailed'],
                                      message=TEXT['messageSavefailed'].format(TEXT['messageSavefailedByBadInteger']))
             else:
-                messagebox.showerror(title=TEXT['titleSavefailed'], message=TEXT['messageSavefailed'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleSavefailed'], message=TEXT['messageSavefailed'].format(e))
                 raise e
         except Exception as e:
-            messagebox.showerror(title=TEXT['titleSavefailed'], message=TEXT['messageSavefailed'].format(e))
+            ThemedMessageBox.showerror(title=TEXT['titleSavefailed'], message=TEXT['messageSavefailed'].format(e))
             raise e
         else:
             self.modified = False
@@ -1451,20 +1584,20 @@ class TCWindow():
         try:
             scenVersion = self.readScenarioVersion(path)
         except (FileNotFoundError, PermissionError) as e:
-            messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
+            ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
             return
         if not CeAttributes.isSupportedVersion(scenVersion):
             v = self.unsupportedVersionHelper(scenVersion)
             if v == 'Newer':
-                messagebox.showerror(title=TEXT['titleOpenfailed'],
+                ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'],
                                     message=TEXT['messageOpenfailed'].format( \
                                         TEXT['messageOpenfailedByNewerVersion'].format(scenVersion, DEFAULT_VERSION)))
             elif v == 'Early':
-                messagebox.showerror(title=TEXT['titleOpenfailed'],
+                ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'],
                                     message=TEXT['messageOpenfailed'].format( \
                                         TEXT['messageOpenfailedByEarlyVersion'].format(scenVersion)))
             else:
-                messagebox.showerror(title=TEXT['titleOpenfailed'],
+                ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'],
                                     message=TEXT['messageOpenfailed'].format( \
                                         TEXT['messageOpenfailedByUnknownVersion'].format(repr(scenVersion))))
             return
@@ -1488,21 +1621,21 @@ class TCWindow():
                 strScenVer: str = parsed.fixed[1]
                 v = self.unsupportedVersionHelper(strScenVer)
                 if v == 'Newer':
-                    messagebox.showerror(title=TEXT['titleOpenfailed'],
+                    ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'],
                                         message=TEXT['messageOpenfailed'].format( \
                                             TEXT['messageOpenfailedByNewerVersion'].format(strScenVer, DEFAULT_VERSION)))
                 elif v == 'Early':
-                    messagebox.showerror(title=TEXT['titleOpenfailed'],
+                    ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'],
                                         message=TEXT['messageOpenfailed'].format( \
                                             TEXT['messageOpenfailedByEarlyVersion'].format(strScenVer)))
                 else:
-                    messagebox.showerror(title=TEXT['titleOpenfailed'],
+                    ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'],
                                         message=TEXT['messageOpenfailed'].format( \
                                             TEXT['messageOpenfailedByUnknownVersion'].format(strScenVer)))
                 return True
 
             if not checkVersionNotSupportedRaise(e):
-                messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
         except UnsupportedVersionError as e:
             def checkTriggerNotSupportedRaise(e: UnsupportedVersionError):
                 """Catch ASP trigger not supported exception."""
@@ -1516,15 +1649,15 @@ class TCWindow():
                     return False
                 strScenVer: str = parsed.fixed[0]
                 strTriggerVer: str = parsed.fixed[1]
-                messagebox.showerror(title=TEXT['titleOpenfailed'],
+                ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'],
                                      message=TEXT['messageOpenfailed'].format( \
                                          TEXT['messageOpenfailedByEarlyTrigger'].format(strScenVer, strTriggerVer)))
                 return True
 
             if not checkTriggerNotSupportedRaise(e):
-                messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
+                ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
         except Exception as e:
-            messagebox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
+            ThemedMessageBox.showerror(title=TEXT['titleOpenfailed'], message=TEXT['messageOpenfailed'].format(e))
         else:
             self.__afterLoadScenFile(scenName, path)
         finally:
@@ -1549,7 +1682,7 @@ class TCWindow():
 
         valid, metadata = decode_trigger_metadata_description(trigger.description)
         if not valid:
-            messagebox.showerror(
+            ThemedMessageBox.showerror(
                 title=TEXT['titleScenarioMetadata'],
                 message=TEXT['messageScenarioMetadataCorrupted'],
             )

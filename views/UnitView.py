@@ -161,7 +161,7 @@ class UnitView(ttk.Frame):
             self.app.fUnitInfo.unitSelected(key.getUnit(self.um))
             self.app.nTabsRightBottom.select(self.app.fUnitInfo)
 
-    def refreshFilteredUnit(self, areaFilter: tuple[int, int, int, int]):
+    def refreshFilteredUnit(self, areaFilter: tuple[int, int, int, int] | None):
         playerFilter = self.varUPlayerFilter.get()
         for item in self.tvUnitList.get_children():
             self.tvUnitList.delete(item)
@@ -171,10 +171,10 @@ class UnitView(ttk.Frame):
             playerList = [p for p in range(0, self.pm.active_players + 1)]
         else:
             return
-        areaFilter = self.app.fMapViewTab.getArea()
-        x1, y1, x2, y2 = areaFilter
-        x2 += 1
-        y2 += 1
+        if areaFilter:
+            x1, y1, x2, y2 = areaFilter
+            x2 += 1
+            y2 += 1
         for player in playerList:
             for listId, unit in enumerate(self.um.units[player]):
                 if areaFilter:
@@ -186,7 +186,7 @@ class UnitView(ttk.Frame):
     def __modifyUnitFilter(self, *args):
         areaFilter = self.app.fMapViewTab.getArea() \
                 if self.cbUAreaFilter.current() in [1,2] \
-                else []
+                else None
         self.app.fMapViewTab.drawAreaUpdateUnitList = True if self.cbUAreaFilter.current() == 2 else False
         self.refreshFilteredUnit(areaFilter)
 

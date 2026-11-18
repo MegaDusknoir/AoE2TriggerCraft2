@@ -19,6 +19,7 @@
     "codeMojibakeSourceEncoding": "gb18030",
     "menuPreferences": "首选项...",
     "namePreferences": {
+        "darkMode": "深色模式",
         "enableOverwritingSource": "允许覆盖原始场景",
         "createBackupWhenOverwritingSource": "覆盖原始场景时创建备份",
         "defaultToSavingMetadata": "默认创建元数据容器",
@@ -36,6 +37,7 @@
         "changeSelfExcluding": "转换其余玩家"
     },
     "descPreferences": {
+        "darkMode": "默认启用深色模式界面",
         "enableOverwritingSource": "允许通过保存 (Ctrl+S) 来覆盖原始场景，请确保已做好备份。",
         "createBackupWhenOverwritingSource": "保存覆盖原始场景时，自动创建备份。",
         "defaultToSavingMetadata": "场景有未保存的元数据，但未创建容器触发时，自动创建。",
@@ -230,7 +232,10 @@
     "labelMappingEnable": "启用",
     "labelMappingValue": "映射值",
     "formatNewMappingName": "新映射 {0}",
+    "btnOK": "确定",
     "btnCancel": "取消",
+    "btnYes": "是",
+    "btnNo": "否",
     "btnConfirm": "确认",
     "btnSave": "保存",
     "btnLoad": "载入...",

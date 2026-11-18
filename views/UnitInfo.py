@@ -470,4 +470,5 @@ class UnitConstSelectButton(IntValueButton):
         fConfirmCancel.pack(side=BOTTOM, fill=X, pady=self.outer.dpi(10))
 
         wndSelect.transient(self)
+        self.outer.setDarkMode(wndSelect)
         eFilter.focus()

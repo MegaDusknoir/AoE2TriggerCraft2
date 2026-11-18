@@ -8,6 +8,41 @@ class GlobalOptions():
     def __init__(self, workDir: str):
         self._baseDir = workDir
         self._configPath = f'{self._baseDir}/config.json'
+        self._earlyLoadJson = self._earlyLoad(self._configPath)
+
+    def earlyGet(self, option):
+        """ Get a option before self.construct """
+        try:
+            value = self._earlyLoadJson['GlobalOptions'][option]
+        except:
+            value = OPTIONS_DEFINE[option]['default']
+        finally:
+            return value
+
+    def _earlyLoad(self, file) -> object | None:
+        jsonValid = False
+        try:
+            with open(file, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+                if 'GlobalOptions' in cfg:
+                    jsonValid = True
+        except (FileNotFoundError, PermissionError, json.decoder.JSONDecodeError, UnicodeDecodeError):
+            cfg = {'GlobalOptions':{}}
+        if jsonValid:
+            return cfg
+        else:
+            return None
+
+    def _lagLoad(self, dumpFile):
+        if self._earlyLoadJson:
+            for attr in self._earlyLoadJson['GlobalOptions']:
+                if hasattr(self, attr):
+                    getattr(self, attr).set(self._earlyLoadJson['GlobalOptions'][attr])
+        else:
+            self.dump(dumpFile)
+
+    def construct(self):
+        """ Construct ttk variables after the main window created """
         for option, args in OPTIONS_DEFINE.items():
             match args['type']:
                 case 'string':
@@ -21,7 +56,8 @@ class GlobalOptions():
                 case _:
                     optionType = ttk.Variable
             setattr(self, option, optionType(value=args['default']))
-        self.load(self._configPath)
+        self._lagLoad(self._configPath)
+        del self._earlyLoadJson
 
     def saveAll(self):
         self.dump(self._configPath)

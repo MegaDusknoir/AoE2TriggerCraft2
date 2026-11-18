@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from tkinter.messagebox import askokcancel
 from typing import TYPE_CHECKING, Literal
 import copy
 from tkinter.constants import *
@@ -15,7 +14,7 @@ from AoE2ScenarioParser.objects.support.trigger_ce_lock import TriggerCELock
 
 from Localization import TEXT
 from TriggerAbstract import *
-from Util import EntryU, Tooltip, ValueSelectButton
+from Util import EntryU, Tooltip, ValueSelectButton, ThemedMessageBox
 from CeAttributesManager import CeAttributes
 from VirtualEffects import TRIGGER_CRAFT_METADATA_HEADER, transform_virtual_effect_all_in_one
 
@@ -223,7 +222,7 @@ class TriggerView(ttk.Frame):
             btnTSelectBack = ValueSelectButton(fTCommands, style='selectionButton.Link.TButton',
                                             textvariable=self.varTSelectBack,
                                             command=lambda: __buttonSelectTrigger(self.varTSelectBack))
-            btnTSelectBack.grid(row=0, column=12, pady=self.app.dpi(2))
+            btnTSelectBack.grid(row=0, column=12, padx=self.app.dpi((2,0)), pady=self.app.dpi(2))
             ttk.Label(fTCommands, text=TEXT['labelTo']).grid(row=1, column=10, pady=self.app.dpi(2))
             btnTSelectTarget = ValueSelectButton(fTCommands, style='selectionButton.Link.TButton',
                                             textvariable=self.varTSelectTarget,
@@ -949,7 +948,7 @@ class TriggerView(ttk.Frame):
             else:
                 check = self.triggerSimilarCheck([self.tm.trigger_display_order[i] for i in range(displayId, displayId + playerCount)])
                 if check is False:
-                    if not askokcancel(TEXT['messageTitleWarning'], TEXT['messageWarningDeduplicateNotMatch'], icon='warning'):
+                    if not ThemedMessageBox.askokcancel(TEXT['messageTitleWarning'], TEXT['messageWarningDeduplicateNotMatch'], icon='warning'):
                         return
         elif nodeType == 'condition':
             trigger = self.tm.get_trigger(triggerId)
@@ -959,7 +958,7 @@ class TriggerView(ttk.Frame):
             else:
                 check = self.conditionSimilarCheck([trigger.condition_order[i] for i in range(displayId, displayId + playerCount)], trigger)
                 if check is False:
-                    if not askokcancel(TEXT['messageTitleWarning'], TEXT['messageWarningDeduplicateNotMatch'], icon='warning'):
+                    if not ThemedMessageBox.askokcancel(TEXT['messageTitleWarning'], TEXT['messageWarningDeduplicateNotMatch'], icon='warning'):
                         return
         else:
             trigger = self.tm.get_trigger(triggerId)
@@ -969,7 +968,7 @@ class TriggerView(ttk.Frame):
             else:
                 check = self.effectSimilarCheck([trigger.effect_order[i] for i in range(displayId, displayId + playerCount)], trigger)
                 if check is False:
-                    if not askokcancel(TEXT['messageTitleWarning'], TEXT['messageWarningDeduplicateNotMatch'], icon='warning'):
+                    if not ThemedMessageBox.askokcancel(TEXT['messageTitleWarning'], TEXT['messageWarningDeduplicateNotMatch'], icon='warning'):
                         return
         self.tl.focus(next)
         for i in range(1, playerCount):

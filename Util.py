@@ -1,12 +1,14 @@
 import logging
+import sys
+import ctypes
 import math
 import re
 import time
 import tkinter as tk
 from tkinter.constants import *
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 import ttkbootstrap as ttk
-import tkinter as tk
+import winsound
 import PIL.Image
 import PIL.ImageTk
 
@@ -1001,6 +1003,322 @@ class ValueSelectButton(ttk.Button):
             if dst < 0:
                 dst = 0
             srcVar.set(str(dst))
+
+def set_dark_title_bar(window: ttk.Window, enabled=True):
+    """Set a Tk window's native Windows title bar to dark or light mode."""
+    if sys.platform != "win32":
+        raise NotImplementedError(
+            "Dark title bars are supported only on Windows."
+        )
+
+    window.update_idletasks()
+    hwnd = int(window.wm_frame(), 0)
+    dark_mode = ctypes.c_int(1 if enabled else 0)
+    dwmapi = ctypes.WinDLL("dwmapi")
+    set_window_attribute = dwmapi.DwmSetWindowAttribute
+    set_window_attribute.argtypes = (
+        ctypes.c_void_p,
+        ctypes.c_uint,
+        ctypes.c_void_p,
+        ctypes.c_uint,
+    )
+    set_window_attribute.restype = ctypes.c_long
+
+    errors = []
+    for attribute in (20, 19):
+        result = set_window_attribute(
+            ctypes.c_void_p(hwnd),
+            attribute,
+            ctypes.byref(dark_mode),
+            ctypes.sizeof(dark_mode),
+        )
+        if result >= 0:
+            return True
+        errors.append(f"{attribute}: 0x{result & 0xFFFFFFFF:08X}")
+
+    raise OSError(
+        "Windows could not set the title bar appearance "
+        f"(DwmSetWindowAttribute HRESULTs: {', '.join(errors)})."
+    )
+
+class ScrollableFrame(ttk.Frame):
+    def __init__(self, master, **kwargs):
+        super().__init__(master, **kwargs)
+
+        self.canvas = ttk.Canvas(self, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(
+            self,
+            orient='vertical',
+            command=self.canvas.yview
+        )
+
+        self.content = ttk.Frame(self.canvas)
+
+        self.window_id = self.canvas.create_window(
+            (0, 0),
+            window=self.content,
+            anchor='nw'
+        )
+
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.scrollbar.pack(side='right', fill='y')
+        self.canvas.pack(side='left', fill='both', expand=True)
+
+        # 内容尺寸变化时更新滚动区域
+        self.content.bind(
+            '<Configure>',
+            self._on_content_configure
+        )
+
+        # Canvas 尺寸变化时同步内部 Frame 宽度
+        self.canvas.bind(
+            '<Configure>',
+            self._on_canvas_configure
+        )
+
+        # 绑定滚轮事件
+        self.canvas.bind('<Enter>', self._bind_mousewheel)
+        self.canvas.bind('<Leave>', self._unbind_mousewheel)
+
+    def _on_content_configure(self, event):
+        self.canvas.configure(
+            scrollregion=self.canvas.bbox('all')
+        )
+
+    def _on_canvas_configure(self, event):
+        self.canvas.itemconfigure(
+            self.window_id,
+            width=event.width
+        )
+
+    def _on_mousewheel(self, event):
+        if event.delta:
+            self.canvas.yview_scroll(
+                -int(event.delta / 120),
+                'units'
+            )
+
+    def _bind_mousewheel(self, event):
+        self.canvas.bind_all(
+            '<MouseWheel>',
+            self._on_mousewheel
+        )
+
+    def _unbind_mousewheel(self, event):
+        self.canvas.unbind_all('<MouseWheel>')
+
+class ThemedMessageBox:
+
+    scale = 1.0
+    dark = False
+
+    localization = {
+        "ok": "OK",
+        "cancel": "Cancel",
+        "yes": "Yes",
+        "no": "No",
+    }
+
+    ICONS = {
+        'info': '\u24D8',
+        'warning': '\u26A0',
+        'error': '\u2716',
+        'question': '\u2753',
+    }
+
+    def _scale(self, value):
+        if isinstance(value, tuple):
+            return tuple(self._scale(item) for item in value)
+        if value == 0:
+            return 0
+        return max(1, round(value * self.scale))
+
+    def __init__(
+        self,
+        title: str,
+        message: str,
+        icon='info',
+        buttons=('ok',),
+        default: str|int=0,
+        parent: ttk.Window = None,
+    ):
+        if parent is None:
+            parent = tk._default_root
+
+        if parent is None:
+            raise RuntimeError(
+                'No default root window is available.'
+            )
+
+        if isinstance(default, int):
+            default = buttons[default]
+
+        self.parent = parent
+        self.result = None
+
+        self.window = ttk.Toplevel(parent)
+        self.window.withdraw()
+        self.window.title(title)
+        self.window.transient(parent)
+        self.window.resizable(False, False)
+        set_dark_title_bar(self.window, self.dark)
+
+        # 主容器
+        frame = ttk.Frame(self.window, padding=self._scale(20))
+        frame.pack(fill='both', expand=True)
+
+        # 消息区域
+        content = ttk.Frame(frame)
+        content.pack(fill='both', expand=True)
+
+        # 图标
+        icon_label = ttk.Label(
+            content,
+            text=self.ICONS.get(icon, ''),
+            font=('Segoe UI Symbol', 26),
+            bootstyle={
+                'info': 'info',
+                'warning': 'warning',
+                'error': 'danger',
+                'question': 'primary',
+            }.get(icon, 'info'),
+        )
+        icon_label.pack(side='left', padx=self._scale((0, 16)), anchor='n')
+
+        # 消息文本
+        message_label = ttk.Label(
+            content,
+            text=message,
+            justify='left',
+            wraplength=self._scale(400),
+        )
+        message_label.pack(side='left', fill='both', expand=True)
+
+        # 按钮区域
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(fill='x', pady=self._scale((20, 0)))
+
+        for i, text in enumerate(buttons):
+            button = ttk.Button(
+                button_frame,
+                text=self.localization.get(text, text),
+                bootstyle='primary' if text == default else 'secondary',
+                command=lambda i=i: self._close(i),
+                width=max(8,len(text))
+            )
+            button.pack(side='right', padx=self._scale((6, 6)))
+
+            if text == default:
+                self.window.bind(
+                    '<Return>',
+                    lambda e, i=i: self._close(i)
+                )
+
+        self.window.bind('<Escape>', lambda e: self._close(None))
+        self.window.protocol('WM_DELETE_WINDOW', lambda: self._close(None))
+
+        # 居中
+        self.window.update_idletasks()
+
+        ws = self.window.winfo_screenwidth()
+        hs = self.window.winfo_screenheight()
+        w = self.window.winfo_reqwidth()
+        h = self.window.winfo_reqheight()
+        x = int((ws - w) * 0.5)
+        y = int((hs - h) * 0.5)
+        self.window.geometry(f'{w}x{h}+{x}+{y}')
+
+        self.window.deiconify()
+
+        self.window.grab_set()
+        self.window.focus_force()
+
+        self.window.wait_window()
+
+    def _close(self, result):
+        self.result = result
+        self.window.destroy()
+
+    @classmethod
+    def showinfo(cls, title:str, message:str, detail='',
+                 icon:Literal['error', 'info', 'question', 'warning']='info',
+                 default=None,
+                 parent=None
+                ):
+        winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        cls(title, message, icon, ('ok',), parent=parent)
+        return 'ok'
+
+    @classmethod
+    def showwarning(cls, title:str, message:str, detail='',
+                    icon:Literal['error', 'info', 'question', 'warning']='warning',
+                    default=None,
+                    parent=None
+                ):
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        cls(title, message, icon, ('ok',), parent=parent)
+        return 'ok'
+
+    @classmethod
+    def showerror(cls, title:str, message:str, detail='',
+                  icon:Literal['error', 'info', 'question', 'warning']='error',
+                  default=None,
+                  parent=None
+                ):
+        winsound.MessageBeep(winsound.MB_ICONHAND)
+        cls(title, message, icon, ('ok',), parent=parent)
+        return 'ok'
+
+    @classmethod
+    def askyesno(cls, title:str, message:str, detail='',
+                 icon:Literal['error', 'info', 'question', 'warning']='question',
+                 default='yes',
+                 parent=None
+                ) -> bool:
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        box = cls(
+            title, message,
+            icon,
+            ('no', 'yes'),
+            default=default,
+            parent=parent,
+        )
+        return box.result == 1
+
+    @classmethod
+    def askyesnocancel(cls, title:str, message:str, detail='', 
+                       icon:Literal['error', 'info', 'question', 'warning']='question',
+                       default='yes',
+                       parent=None
+                       ) -> bool | None:
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        box = cls(
+            title, message,
+            icon,
+            ('cancel', 'no', 'yes'),
+            default=default,
+            parent=parent,
+        )
+        if box.result == 0:
+            return None
+        return box.result == 2
+
+    @classmethod
+    def askokcancel(cls, title:str, message:str, detail='',
+                    icon:Literal['error', 'info', 'question', 'warning']='question',
+                    default='ok',
+                    parent=None
+                    ) -> bool:
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        box = cls(
+            title, message,
+            icon,
+            ('cancel', 'ok'),
+            default=default,
+            parent=parent,
+        )
+        return box.result == 1
 
 class DebugTimeCount(object):
     def __init__(self, printFmt: str):
